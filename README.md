@@ -2,4 +2,4 @@
 
 *working draft*
 
-A Rust-based markdown AST transform extension via [markdown-it.rs](https://github.com/nickel-org/markdown-it.rs).
+A Rust-based markdown AST transform extension via [markdown-it Rust port](https://github.com/markdown-it-rust/markdown-it).
