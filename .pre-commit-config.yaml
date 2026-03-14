@@ -1,0 +1,23 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-json
+      - id: check-toml
+      - id: check-yaml
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.2
+    hooks:
+      - id: codespell
+        args:
+          - "--interactive"
+          - "3"
+          - "--write-changes"
+          - "--skip=assets/.icons/*"
+
+  - repo: https://github.com/FeryET/pre-commit-rust
+    rev: v1.2.1
+    hooks:
+      - id: fmt
+      - id: cargo-check

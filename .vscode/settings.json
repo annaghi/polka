@@ -1,0 +1,30 @@
+{
+    "rust-analyzer.check.command": "clippy",
+    "[editorconfig]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true
+    },
+    "[ignore][properties]": {
+        "editor.defaultFormatter": "foxundermoon.shell-format",
+        "editor.formatOnSave": true
+    },
+    "[json][jsonc][yaml][yml]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true
+    },
+    "markdownlint.config": {
+        "default": false
+    },
+    "[markdown]": {
+        "editor.formatOnSave": false,
+        "editor.defaultFormatter": null
+    },
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+        "editor.formatOnSave": true
+    },
+    "[toml]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true
+    }
+}

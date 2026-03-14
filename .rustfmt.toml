@@ -1,0 +1,5 @@
+edition = "2024"
+style_edition = "2024"
+fn_params_layout = "compressed"
+max_width = 120
+struct_lit_width = 30
