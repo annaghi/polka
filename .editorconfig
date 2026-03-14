@@ -22,6 +22,7 @@ indent_style = tab
 indent_size = 4
 
 [*.md]
+# Markdown hard breaks: use \ (not trailing spaces) since we trim whitespace
 trim_trailing_whitespace = true
 
 [*.txt]
