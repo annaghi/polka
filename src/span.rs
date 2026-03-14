@@ -2,7 +2,6 @@
 //!
 //! looks like `|this|`
 //!
-//! <https://spec.commonmark.org/0.30/#emphasis-and-strong-emphasis>
 use markdown_it::generics::inline::emph_pair;
 use markdown_it::{MarkdownIt, Node, NodeValue, Renderer};
 

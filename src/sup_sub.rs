@@ -1,5 +1,6 @@
 //! Superscript syntax (like `^this^`)
 //! Subscript syntax (like `~this~`)
+//!
 use markdown_it::generics::inline::emph_pair;
 use markdown_it::{MarkdownIt, Node, NodeValue, Renderer};
 

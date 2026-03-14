@@ -4,6 +4,7 @@
 //!
 //! <https://github.com/jgm/djot/blob/main/doc/syntax.md#inline-attributes>
 //! <https://github.com/jgm/djot/blob/main/doc/syntax.md#block-attributes>
+//!
 use markdown_it::parser::core::CoreRule;
 use markdown_it::parser::inline::builtin::InlineParserRule;
 use markdown_it::parser::inline::{Text, TextSpecial};

@@ -4,6 +4,9 @@
 //!
 //! Parses `:family-name:` shortcodes and resolves them to SVG file content
 //! using the configured icon directories.
+//!
+//! See: markdown-it/src/generics/inline/code_pair.rs
+//!
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
