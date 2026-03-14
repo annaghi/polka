@@ -115,6 +115,8 @@ impl<const MARKER: char> InlineRule for IconScanner<MARKER> {
     const MARKER: char = MARKER;
 
     fn run(state: &mut InlineState) -> Option<(Node, usize)> {
+        const MARKER_LEN: usize = 1;
+
         let mut chars = state.src[state.pos..state.pos_max].chars();
         if chars.next().unwrap() != MARKER {
             return None;
@@ -133,7 +135,7 @@ impl<const MARKER: char> InlineRule for IconScanner<MARKER> {
         let opener_len = pos - state.pos;
 
         // opener marker length must be 1
-        if opener_len != 1 {
+        if opener_len != MARKER_LEN {
             return None;
         }
 
@@ -179,7 +181,7 @@ impl<const MARKER: char> InlineRule for IconScanner<MARKER> {
 
                 let node = Node::new(Icon {
                     marker: MARKER,
-                    marker_len: 1,
+                    marker_len: MARKER_LEN,
                     name: name.to_string(),
                     path,
                     svg,
