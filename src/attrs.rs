@@ -92,7 +92,7 @@ fn apply_inline_attrs(node: &mut Node) {
                 .expect("node was verified as Text above")
                 .content = new_content;
         } else {
-            // Remove the attr-only text node
+            // The entire Text was attrs, and so mark it for removal
             to_remove.push(i);
         }
     }
@@ -101,8 +101,8 @@ fn apply_inline_attrs(node: &mut Node) {
 }
 
 /// Two patterns:
-/// 1. Detached: `{ attrs }` paragraph → apply to next sibling, remove paragraph
-/// 2. Attached: `{ attrs }\nContent` → apply to this paragraph, remove attrs text
+/// 1. Detached: `{ attrs }`\n\ntext → apply to next sibling, remove paragraph
+/// 2. Attached: `{ attrs }\ntext` → apply to this paragraph, remove attrs text
 fn apply_block_attrs(node: &mut Node) {
     if node.children.is_empty() {
         return;
@@ -280,7 +280,7 @@ fn split_attrs_remaining(s: &str) -> (&str, &str) {
 
 /// Find closing `}` index, respecting double-quoted values and backslash escapes.
 ///
-/// Matches jotdown's quoting rules: only `"..."` double quoated values with `\"` escape.
+/// Matches Jotdown's quoting rules: only `"..."` double quoated values with `\"` escape.
 fn find_closing_brace(s: &str) -> Option<usize> {
     let mut in_quote = false;
     let mut chars = s.char_indices();
@@ -298,7 +298,7 @@ fn find_closing_brace(s: &str) -> Option<usize> {
     None
 }
 
-/// Parse attributes using jotdown's parser.
+/// Parse attributes using Jotdown's parser.
 ///
 /// Accepts either `{.class #id}` or raw `.class #id` (auto-wrapped).
 fn parse_jotdown(input: &str) -> Vec<(String, String)> {
