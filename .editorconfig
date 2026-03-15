@@ -5,31 +5,31 @@
 root = true
 
 [*]
+
 # Non-configurable Prettier behaviors
+
 charset = utf-8
 insert_final_newline = true
 trim_trailing_whitespace = true
 
 # Configurable Prettier behaviors
+
 end_of_line = lf
 indent_style = space
 indent_size = 2
 max_line_length = 120
 
 # Custom settings
+
 [Makefile]
 indent_style = tab
 indent_size = 4
 
-[*.md]
-# Markdown hard breaks: use \ (not trailing spaces) since we trim whitespace
-trim_trailing_whitespace = true
+[*.{html,svg,json,jsonc,json5,hjson,js,css,py,rs,sh}]
+indent_size = 4
 
 [*.txt]
 end_of_line = crlf
 
 [*.{yml,yaml}]
 max_line_length = 999
-
-[*.{html,svg,json,jsonc,json5,hjson,js,css,py,rs,sh}]
-indent_size = 4
