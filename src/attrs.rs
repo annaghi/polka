@@ -8,7 +8,7 @@
 use markdown_it::parser::core::CoreRule;
 use markdown_it::parser::inline::builtin::InlineParserRule;
 use markdown_it::parser::inline::{Text, TextSpecial};
-use markdown_it::plugins::cmark::block::list::ListItem;
+use markdown_it::plugins::cmark::block::list::{BulletList, ListItem};
 use markdown_it::plugins::cmark::block::paragraph::Paragraph;
 use markdown_it::plugins::cmark::inline::newline::Softbreak;
 use markdown_it::plugins::html::html_block::HtmlBlock;
@@ -40,6 +40,13 @@ impl CoreRule for AttrsRule {
         });
 
         crate::debug_write("03-ast-block_attrs.txt", &format!("{root:#?}"));
+
+        // Pass 3: Derived attributes
+        root.walk_mut(|node, _| {
+            apply_derived_attrs(node);
+        });
+
+        crate::debug_write("04-ast-_attrs.txt", &format!("{root:#?}"));
     }
 }
 
@@ -344,6 +351,19 @@ fn remove_children(node: &mut Node, to_remove: &[usize]) {
         }
     }
     node.children.truncate(write);
+}
+
+fn apply_derived_attrs(node: &mut Node) {
+    if node.attrs.is_empty() {
+        return;
+    }
+
+    // Unordered lists with custom attrs likely have custom styling.
+    // Add role="list" to preserve screen reader semantics,
+    // since our CSS strips markers via ul[role="list"] { list-style: none }
+    if node.cast::<BulletList>().is_some() {
+        node.attrs.push(("role", "list".to_string()));
+    }
 }
 
 #[cfg(test)]
