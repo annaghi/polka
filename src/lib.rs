@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
@@ -22,23 +22,18 @@ pub fn add(md: &mut MarkdownIt, icon_dirs: Vec<PathBuf>) {
 }
 
 thread_local! {
-    static DEBUG_ACTIVE: Cell<bool> = const { Cell::new(false) };
-    static DEBUG_DIR: Cell<Option<PathBuf>> = const { Cell::new(None) };
+    static DEBUG_DIR: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }
 
-pub fn set_debug(active: bool, dir: PathBuf) {
-    DEBUG_ACTIVE.set(active);
-    DEBUG_DIR.set(Some(dir));
+pub fn set_debug(dir: Option<PathBuf>) {
+    DEBUG_DIR.with(|d| *d.borrow_mut() = dir);
 }
 
-pub(crate) fn debug_write(output_filename: &str, content: &str) {
-    if !DEBUG_ACTIVE.get() {
-        return;
-    }
-
-    let Some(dir) = DEBUG_DIR.take() else { return };
-    let _ = fs::create_dir_all(&dir);
-    let _ = File::create(dir.join(output_filename)).and_then(|mut f| f.write_all(content.as_bytes()));
-
-    DEBUG_DIR.set(Some(dir));
+pub(crate) fn debug_write(filename: &str, content: &str) {
+    DEBUG_DIR.with(|d| {
+        if let Some(ref dir) = *d.borrow() {
+            let _ = fs::create_dir_all(dir);
+            let _ = File::create(dir.join(filename)).and_then(|mut f| f.write_all(content.as_bytes()));
+        }
+    });
 }
