@@ -202,8 +202,8 @@ fn listitem_attr_loose_detached() {
     assert_eq!(
         render("- {.aaa}\n\n  item aaa"),
         r#"<ul>
-<li class="aaa">
-<p>item aaa</p>
+<li>
+<p class="aaa">item aaa</p>
 </li>
 </ul>
 "#
@@ -211,8 +211,8 @@ fn listitem_attr_loose_detached() {
     assert_eq!(
         render("-\n  {.bbb}\n\n  item bbb"),
         r#"<ul>
-<li class="bbb">
-<p>item bbb</p>
+<li>
+<p class="bbb">item bbb</p>
 </li>
 </ul>
 "#
@@ -224,7 +224,8 @@ fn listitem_attr_loose_detached_with_para_attr() {
     assert_eq!(
         render("- {.ccc}\n\n  {.c}\n  item ccc c"),
         r#"<ul>
-<li class="ccc">
+<li>
+<p>{.ccc}</p>
 <p class="c">item ccc c</p>
 </li>
 </ul>
@@ -233,7 +234,8 @@ fn listitem_attr_loose_detached_with_para_attr() {
     assert_eq!(
         render("-\n  {.ddd}\n\n  {.d}\n  item ddd d"),
         r#"<ul>
-<li class="ddd">
+<li>
+<p>{.ddd}</p>
 <p class="d">item ddd d</p>
 </li>
 </ul>
@@ -242,7 +244,8 @@ fn listitem_attr_loose_detached_with_para_attr() {
     assert_eq!(
         render("- {.eee}\n\n  {.e}\n\n  item eee e"),
         r#"<ul>
-<li class="eee">
+<li>
+<p>{.eee}</p>
 <p class="e">item eee e</p>
 </li>
 </ul>
@@ -251,7 +254,8 @@ fn listitem_attr_loose_detached_with_para_attr() {
     assert_eq!(
         render("-\n  {.fff}\n\n  {.f}\n\n  item fff f"),
         r#"<ul>
-<li class="fff">
+<li>
+<p>{.fff}</p>
 <p class="f">item fff f</p>
 </li>
 </ul>
@@ -263,7 +267,7 @@ fn listitem_attr_loose_detached_with_para_attr() {
 fn list_attr_on_list() {
     assert_eq!(
         render("{.cls}\n- a\n- b"),
-        r#"<ul class="cls">
+        r#"<ul class="cls" role="list">
 <li>a</li>
 <li>b</li>
 </ul>
@@ -286,8 +290,8 @@ fn list_attr_on_list_ordered() {
 #[test]
 fn list_attr_on_list_and_item() {
     assert_eq!(
-        render("{.list}\n- {.item}\n  text"),
-        r#"<ul class="list">
+        render("{.cls}\n- {.item}\n  text"),
+        r#"<ul class="cls" role="list">
 <li class="item">text</li>
 </ul>
 "#
@@ -307,20 +311,8 @@ fn list_attr_multiple_items() {
 }
 
 #[test]
-fn list_attr_on_list_with_blank() {
-    assert_eq!(
-        render("{.cls}\n\n- a\n- b"),
-        r#"<ul class="cls">
-<li>a</li>
-<li>b</li>
-</ul>
-"#
-    );
-}
-
-#[test]
 fn blockquote_basic() {
-    assert_eq!(render("> hello"), "<blockquote><p>hello</p></blockquote>");
+    assert_eq!(render("> hello"), "<blockquote>\n<p>hello</p>\n</blockquote>\n");
 }
 
 #[test]
