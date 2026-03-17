@@ -8,9 +8,10 @@
 use markdown_it::parser::core::CoreRule;
 use markdown_it::parser::inline::builtin::InlineParserRule;
 use markdown_it::parser::inline::{Text, TextSpecial};
+use markdown_it::plugins::cmark::block::lheading::SetextHeader;
 use markdown_it::plugins::cmark::block::list::{BulletList, ListItem};
 use markdown_it::plugins::cmark::block::paragraph::Paragraph;
-use markdown_it::plugins::cmark::inline::newline::Softbreak;
+use markdown_it::plugins::cmark::inline::newline::{Hardbreak, Softbreak};
 use markdown_it::plugins::html::html_block::HtmlBlock;
 use markdown_it::{MarkdownIt, Node};
 
@@ -79,12 +80,10 @@ fn apply_inline_attrs(node: &mut Node) {
             }
 
             let (attrs_raw, remaining_raw) = split_attrs_remaining(&text.content);
-            if attrs_raw.is_empty() {
-                continue;
-            }
 
             let attrs = parse_jotdown(attrs_raw);
             let remaining = (!remaining_raw.is_empty()).then(|| remaining_raw.to_string());
+
             (attrs, remaining)
         };
 
@@ -108,114 +107,169 @@ fn apply_inline_attrs(node: &mut Node) {
 }
 
 /// Two patterns:
-/// 1. Detached: `{ attrs }`\n\ntext → apply to next sibling, remove paragraph
-/// 2. Attached: `{ attrs }\ntext` → apply to this paragraph, remove attrs text
+/// 1. Detached: `{ attrs }`\n\nblock → apply to next sibling, remove paragraph
+/// 2. Attached: `{ attrs }\nblock` → apply to this node, remove attrs text
 fn apply_block_attrs(node: &mut Node) {
     if node.children.is_empty() {
         return;
     }
 
-    let mut to_remove = Vec::new();
+    if node.cast::<Paragraph>().is_none() {
+        apply_non_paragraph_attrs(node);
+    }
 
-    for i in 0..node.children.len() {
-        // P    > TA [SB TA]*
-        // P    > TA [SB TA]* SB X Y ...
-        // LI   > TA [SB TA]*
-        // LI   > TA [SB TA]* SB X Y ...
-        if node.children[i].cast::<Paragraph>().is_none() && node.children[i].cast::<ListItem>().is_none() {
-            continue;
-        }
+    apply_paragraph_attrs(node);
+}
 
-        let Some((all_attrs_raw, attrs_end_idx)) = scan_leading_attrs(&node.children[i].children) else {
-            continue;
-        };
+fn apply_non_paragraph_attrs(node: &mut Node) {
+    let Some((all_attrs_raw, attrs_end_idx, _)) = scan_leading_attrs(&node.children) else {
+        return;
+    };
 
-        let all_attrs = parse_jotdown(&all_attrs_raw);
-        if all_attrs.is_empty() {
-            continue;
-        }
+    eprintln!("GENERAL");
+    let all_attrs = parse_jotdown(&all_attrs_raw);
+    eprintln!("{all_attrs_raw:?}");
 
-        let children_len = node.children[i].children.len();
-
-        if attrs_end_idx == children_len {
-            // node.children[i].children: TA [SB TA]* - all children are attrs
-
-            // Special case: ListItem all children are attrs, we add attrs to the empty <li> element
-            // LI   > TA [SB TA]*
-            if node.children[i].cast::<ListItem>().is_some() {
-                // Apply those attrs to the <li> itself.
-                for (key, value) in all_attrs {
-                    node.children[i].attrs.push((intern(&key), value));
-                }
-
-                // strip first j+1 children (attrs + trailing softbreak)
-                // The Paragraph's or ListItem's srcmap is deliberately
-                // kept spanning the original range, attrs were part of
-                // this paragraph's or listitem's source, just extracted
-                // as metadata.
-                node.children[i].children.drain(..attrs_end_idx);
-
-                continue;
+    if attrs_end_idx == node.children.len() {
+        eprintln!("idx == len");
+        // node.children: TA [SB TA]* - only attributes
+        if node.cast::<Paragraph>().is_none() && node.cast::<SetextHeader>().is_none() {
+            for (key, value) in all_attrs {
+                node.attrs.push((intern(&key), value));
             }
 
-            // No next sibling to apply the attrs to: {.orphan}
-            let has_next_sibling = i + 1 < node.children.len();
-            if !has_next_sibling {
-                continue;
+            node.children.drain(..attrs_end_idx);
+        }
+    } else if attrs_end_idx < node.children.len() {
+        eprintln!("idx < len");
+        // node.children: TA [SB TA]* SB X Y ... - a prefix of attrs and an SB between content
+        if node.children[attrs_end_idx].cast::<Softbreak>().is_some() {
+            for (key, value) in all_attrs {
+                node.attrs.push((intern(&key), value));
+            }
+
+            node.children.drain(..=attrs_end_idx);
+        } else {
+            // Cannot be a structural inline element (not plain text nor whitespace)
+            if node.children[attrs_end_idx].cast::<Text>().is_some()
+                || node.children[attrs_end_idx].cast::<TextSpecial>().is_some()
+                || node.children[attrs_end_idx].cast::<Hardbreak>().is_some()
+            {
+                return;
             }
 
             // Do not apply attrs to html blocks, use HTML attributes directly
-            if node.children[i + 1].cast::<HtmlBlock>().is_some() {
-                continue;
-            }
-
-            // Special case: ListItem is the node, first child Paragraph is all-attrs, we add attrs to the <li> element
-            //    ┌ P > TA [SB TA]*
-            // LI ├ X
-            //    ├ Y
-            if node.cast::<ListItem>().is_some() && i == 0 {
-                // Apply those attrs to the <li> itself.
-                for (key, value) in all_attrs {
-                    node.attrs.push((intern(&key), value));
-                }
-
-                // The entire Paragraph was attrs, and so mark it for removal
-                to_remove.push(i);
-
-                continue;
+            if node.children[attrs_end_idx].cast::<HtmlBlock>().is_some() {
+                return;
             }
 
             // Next sibling has an attrs-only first child starting a new attrs block: {.widow}
-            let first_is_attr = node.children[i + 1]
+            let first_is_attr = node.children[attrs_end_idx]
                 .children
                 .first()
                 .is_some_and(|c| is_attr_only_text(c).is_some());
             if first_is_attr {
+                return;
+            }
+
+            // Apply attrs to next sibling (node.children[attrs_end_idx])
+            for (key, value) in all_attrs {
+                node.children[attrs_end_idx].attrs.push((intern(&key), value));
+            }
+
+            node.children.drain(..attrs_end_idx);
+        }
+    }
+}
+
+fn apply_paragraph_attrs(node: &mut Node) {
+    let mut to_remove = Vec::new();
+
+    for i in 0..node.children.len() {
+        if node.children[i].cast::<Paragraph>().is_some() {
+            // P    > TA [SB TA]*
+            // P    > TA [SB TA]* SB X Y ...
+            let Some((all_attrs_raw, attrs_end_idx, is_container_attrs)) =
+                scan_leading_attrs(&node.children[i].children)
+            else {
                 continue;
+            };
+
+            eprintln!("PARAGRAPH");
+
+            let children_len = node.children[i].children.len();
+
+            let all_attrs = parse_jotdown(&all_attrs_raw);
+
+            eprintln!("{all_attrs_raw:?}");
+
+            if attrs_end_idx == children_len {
+                eprintln!("idx == len");
+                // node.children[i].children: TA [SB TA]* - all children are attrs
+
+                // Special case: ListItem is the node, first child Paragraph is all-attrs, and is_container_attrs
+                //    ┌ P > TA [SB TA]*
+                // LI ├ X
+                //    ├ Y
+                if node.cast::<ListItem>().is_some() && is_container_attrs {
+                    eprintln!("ListItem");
+                    // Apply those attrs to the <li> itself.
+                    for (key, value) in all_attrs {
+                        node.attrs.push((intern(&key), value));
+                    }
+
+                    // The entire Paragraph was attrs, and so mark it for removal
+                    to_remove.push(i);
+
+                    continue;
+                }
+
+                // No next sibling to apply the attrs to: {.orphan}
+                let has_next_sibling = i + 1 < node.children.len();
+                if !has_next_sibling {
+                    continue;
+                }
+
+                // Do not apply attrs to html blocks, use HTML attributes directly
+                if node.children[i + 1].cast::<HtmlBlock>().is_some() {
+                    continue;
+                }
+
+                eprintln!("{:?}", node.children[i + 1].name());
+
+                // Next sibling has an attrs-only first child starting a new attrs block: {.widow}
+                let first_is_attr = node.children[i + 1]
+                    .children
+                    .first()
+                    .is_some_and(|c| is_attr_only_text(c).is_some());
+                if first_is_attr {
+                    continue;
+                }
+
+                // Apply attrs to next sibling (node.children[i + 1])
+                for (key, value) in all_attrs {
+                    node.children[i + 1].attrs.push((intern(&key), value));
+                }
+
+                // The entire Paragraph was attrs, and so mark it for removal
+                to_remove.push(i);
+            } else if attrs_end_idx < children_len {
+                eprintln!("idx < len");
+                // node.children[i].children: TA [SB TA]* SB X Y ... - a prefix of attrs and an SB between content
+
+                if node.children[i].children[attrs_end_idx].cast::<Softbreak>().is_some() {
+                    // Apply attrs to the current Paragraph (node.children[i])
+                    for (key, value) in all_attrs {
+                        node.children[i].attrs.push((intern(&key), value));
+                    }
+
+                    // strip first j+1 children (attrs + trailing softbreak)
+                    // The Paragraph's or ListItem's srcmap is deliberately
+                    // kept spanning the original range, attrs were part of
+                    // this paragraph's source, just extracted as metadata.
+                    node.children[i].children.drain(..=attrs_end_idx);
+                }
             }
-
-            // Apply attrs to next sibling (node.children[i + 1])
-            for (key, value) in all_attrs {
-                node.children[i + 1].attrs.push((intern(&key), value));
-            }
-
-            // The entire Paragraph was attrs, and so mark it for removal
-            to_remove.push(i);
-        } else if attrs_end_idx < children_len && node.children[i].children[attrs_end_idx].cast::<Softbreak>().is_some()
-        {
-            // node.children[i].children: TA [SB TA]* SB X Y ... - a prefix of attrs and an SB between content
-
-            // Apply attrs to the current Paragraph or ListItem (node.children[i])
-            for (key, value) in all_attrs {
-                node.children[i].attrs.push((intern(&key), value));
-            }
-
-            // strip first j+1 children (attrs + trailing softbreak)
-            // The Paragraph's or ListItem's srcmap is deliberately
-            // kept spanning the original range, attrs were part of
-            // this paragraph's or listitem's source, just extracted
-            // as metadata.
-            node.children[i].children.drain(..=attrs_end_idx);
         }
     }
 
@@ -227,33 +281,39 @@ fn apply_block_attrs(node: &mut Node) {
 ///
 /// Returns `(all_attrs, j)` where `j` is the index past the last consumed
 /// attr node, or `None` if the first child isn't a valid attr-only Text.
-fn scan_leading_attrs(children: &[Node]) -> Option<(String, usize)> {
+fn scan_leading_attrs(children: &[Node]) -> Option<(String, usize, bool)> {
     let mut all_attrs = String::new();
+    let mut is_container_attrs = false;
 
-    // Process first child, and check if it is a TA
-    // TA
-    let attrs = is_attr_only_text(children.first()?)?;
+    let first = children.first()?;
+    let text = first.cast::<Text>()?;
+
+    let content = if text.content.starts_with('<') {
+        is_container_attrs = true;
+        &text.content[1..]
+    } else {
+        &text.content
+    };
+
+    let (attrs, remaining) = split_attrs_remaining(content);
+    if attrs.is_empty() || !remaining.is_empty() {
+        return None;
+    }
     all_attrs.push_str(attrs);
 
-    // Process children starting from the second
-    // Looking for [SB TA] pairs
     let mut j = 1;
     while j + 1 < children.len() {
-        // SB
         if children[j].cast::<Softbreak>().is_none() {
             break;
         }
-
-        // TA
         let Some(attrs) = is_attr_only_text(&children[j + 1]) else {
             break;
         };
         all_attrs.push_str(attrs);
-
         j += 2;
     }
 
-    Some((all_attrs, j))
+    Some((all_attrs, j, is_container_attrs))
 }
 
 fn is_attr_only_text(node: &Node) -> Option<&str> {
@@ -775,54 +835,90 @@ mod tests {
         fn single_attr() {
             // TA
             let children = parse_paragraph_children("{.a}");
-            let (attrs, end_idx) = scan_leading_attrs(&children).unwrap();
+            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
             assert_eq!(attrs, "{.a}");
             assert_eq!(end_idx, 1);
+            assert!(!is_container_attrs);
         }
 
         #[test]
         fn two_attrs() {
             // TA (SB TA)
             let children = parse_paragraph_children("{.a}\n{.b}");
-            let (attrs, end_idx) = scan_leading_attrs(&children).unwrap();
+            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
             assert_eq!(attrs, "{.a}{.b}");
             assert_eq!(end_idx, 3);
+            assert!(!is_container_attrs);
         }
 
         #[test]
         fn three_attrs() {
             // TA (SB TA) (SB TA)
             let children = parse_paragraph_children("{.a}\n{.b}\n{.c}");
-            let (attrs, end_idx) = scan_leading_attrs(&children).unwrap();
+            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
             assert_eq!(attrs, "{.a}{.b}{.c}");
             assert_eq!(end_idx, 5);
+            assert!(!is_container_attrs);
         }
 
         #[test]
         fn single_attr_text() {
             // TA SB T
             let children = parse_paragraph_children("{.a}\ntext");
-            let (attrs, end_idx) = scan_leading_attrs(&children).unwrap();
+            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
             assert_eq!(attrs, "{.a}");
             assert_eq!(end_idx, 1);
+            assert!(!is_container_attrs);
         }
 
         #[test]
         fn two_attrs_text() {
             // TA (SB TA) SB T
             let children = parse_paragraph_children("{.a}\n{.b}\ntext");
-            let (attrs, end_idx) = scan_leading_attrs(&children).unwrap();
+            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
             assert_eq!(attrs, "{.a}{.b}");
             assert_eq!(end_idx, 3);
+            assert!(!is_container_attrs);
         }
 
         #[test]
         fn three_attrs_text() {
             // TA (SB TA) (SB TA) SB T
             let children = parse_paragraph_children("{.a}\n{.b}\n{.c}\ntext");
-            let (attrs, end_idx) = scan_leading_attrs(&children).unwrap();
+            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
             assert_eq!(attrs, "{.a}{.b}{.c}");
             assert_eq!(end_idx, 5);
+            assert!(!is_container_attrs);
+        }
+
+        #[test]
+        fn container_single_attr() {
+            // TA
+            let children = parse_paragraph_children("<{.a}");
+            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
+            assert_eq!(attrs, "{.a}");
+            assert_eq!(end_idx, 1);
+            assert!(is_container_attrs);
+        }
+
+        #[test]
+        fn container_two_attrs() {
+            // TA (SB TA)
+            let children = parse_paragraph_children("<{.a}\n{.b}");
+            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
+            assert_eq!(attrs, "{.a}{.b}");
+            assert_eq!(end_idx, 3);
+            assert!(is_container_attrs);
+        }
+
+        #[test]
+        fn container_double_attrs() {
+            // TA (SB TA)
+            let children = parse_paragraph_children("<{.a}\n<{.b}");
+            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
+            assert_eq!(attrs, "{.a}");
+            assert_eq!(end_idx, 1);
+            assert!(is_container_attrs);
         }
     }
 
@@ -936,15 +1032,13 @@ mod tests {
                 #[test]
                 fn settext_heading_equal_signs() {
                     let html = render("{.a}\nfoo\n===");
-                    assert!(html.contains("<h1>{.a}\nfoo</h1>"), "got: {html}");
-                    assert!(!html.contains(r#"class="a"#), "got: {html}");
+                    assert!(html.contains(r#"<h1 class="a">foo</h1>"#), "got: {html}");
                 }
 
                 #[test]
                 fn settext_heading_dashes() {
                     let html = render("{.a}\nfoo\n---");
-                    assert!(html.contains("<h2>{.a}\nfoo</h2>"), "got: {html}");
-                    assert!(!html.contains(r#"class="a"#), "got: {html}");
+                    assert!(html.contains(r#"<h2 class="a">foo</h2>"#), "got: {html}");
                 }
 
                 // Indented code blocks
@@ -1170,28 +1264,30 @@ mod tests {
                 #[test]
                 fn attr_paragraph() {
                     let html = render("- {.a}\n\n  item");
-                    assert!(html.contains(r#"<li class="a">"#), "got: {html}");
-                    assert!(html.contains("<p>item</p>"), "got: {html}");
+                    assert!(html.contains("<li>"), "got: {html}");
+                    assert!(html.contains(r#"<p class="a">item</p>"#), "got: {html}");
                 }
 
                 #[test]
                 fn attr_blank_line_paragraph() {
                     let html = render("-\n  {.a}\n\n  item");
-                    assert!(html.contains(r#"<li class="a">"#), "got: {html}");
-                    assert!(html.contains("<p>item</p>"), "got: {html}");
+                    assert!(html.contains("<li>"), "got: {html}");
+                    assert!(html.contains(r#"<p class="a">item</p>"#), "got: {html}");
                 }
 
                 #[test]
                 fn attr_paragraph_attrs() {
                     let html = render("- {.a}\n\n  {.b}\n  item");
-                    assert!(html.contains(r#"<li class="a">"#), "got: {html}");
+                    assert!(html.contains("<li>"), "got: {html}");
+                    assert!(html.contains("<p>{.a}</p>"), "got: {html}");
                     assert!(html.contains(r#"<p class="b">item</p>"#), "got: {html}");
                 }
 
                 #[test]
                 fn attr_blank_line_paragraph_attrs() {
                     let html = render("-\n  {.a}\n\n  {.b}\n  item");
-                    assert!(html.contains(r#"<li class="a">"#), "got: {html}");
+                    assert!(html.contains("<li>"), "got: {html}");
+                    assert!(html.contains("<p>{.a}</p>"), "got: {html}");
                     assert!(html.contains(r#"<p class="b">item</p>"#), "got: {html}");
                 }
             }
@@ -1202,13 +1298,13 @@ mod tests {
                 #[test]
                 fn list_container_attached() {
                     let html = render("{.a}\n- item>");
-                    assert!(html.contains(r#"<ul class="a">"#), "got: {html}");
+                    assert!(html.contains(r#"<ul class="a""#), "got: {html}");
                 }
 
                 #[test]
                 fn list_container_detached() {
                     let html = render("{.a}\n\n- item>");
-                    assert!(html.contains(r#"<ul class="a">"#), "got: {html}");
+                    assert!(html.contains(r#"<ul class="a""#), "got: {html}");
                 }
             }
         }
