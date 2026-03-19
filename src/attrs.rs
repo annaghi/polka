@@ -126,12 +126,9 @@ fn apply_non_paragraph_attrs(node: &mut Node) {
         return;
     };
 
-    eprintln!("GENERAL");
     let all_attrs = parse_jotdown(&all_attrs_raw);
-    eprintln!("{all_attrs_raw:?}");
 
     if attrs_end_idx == node.children.len() {
-        eprintln!("idx == len");
         // node.children: TA [SB TA]* - only attributes
         if node.cast::<Paragraph>().is_none() && node.cast::<SetextHeader>().is_none() {
             for (key, value) in all_attrs {
@@ -141,7 +138,6 @@ fn apply_non_paragraph_attrs(node: &mut Node) {
             node.children.drain(..attrs_end_idx);
         }
     } else if attrs_end_idx < node.children.len() {
-        eprintln!("idx < len");
         // node.children: TA [SB TA]* SB X Y ... - a prefix of attrs and an SB between content
         if node.children[attrs_end_idx].cast::<Softbreak>().is_some() {
             for (key, value) in all_attrs {
@@ -195,16 +191,11 @@ fn apply_paragraph_attrs(node: &mut Node) {
                 continue;
             };
 
-            eprintln!("PARAGRAPH");
-
             let children_len = node.children[i].children.len();
 
             let all_attrs = parse_jotdown(&all_attrs_raw);
 
-            eprintln!("{all_attrs_raw:?}");
-
             if attrs_end_idx == children_len {
-                eprintln!("idx == len");
                 // node.children[i].children: TA [SB TA]* - all children are attrs
 
                 // Special case: ListItem is the node, first child Paragraph is all-attrs, and is_container_attrs
@@ -212,7 +203,6 @@ fn apply_paragraph_attrs(node: &mut Node) {
                 // LI ├ X
                 //    ├ Y
                 if node.cast::<ListItem>().is_some() && is_container_attrs {
-                    eprintln!("ListItem");
                     // Apply those attrs to the <li> itself.
                     for (key, value) in all_attrs {
                         node.attrs.push((intern(&key), value));
@@ -235,8 +225,6 @@ fn apply_paragraph_attrs(node: &mut Node) {
                     continue;
                 }
 
-                eprintln!("{:?}", node.children[i + 1].name());
-
                 // Next sibling has an attrs-only first child starting a new attrs block: {.widow}
                 let first_is_attr = node.children[i + 1]
                     .children
@@ -254,7 +242,6 @@ fn apply_paragraph_attrs(node: &mut Node) {
                 // The entire Paragraph was attrs, and so mark it for removal
                 to_remove.push(i);
             } else if attrs_end_idx < children_len {
-                eprintln!("idx < len");
                 // node.children[i].children: TA [SB TA]* SB X Y ... - a prefix of attrs and an SB between content
 
                 if node.children[i].children[attrs_end_idx].cast::<Softbreak>().is_some() {
