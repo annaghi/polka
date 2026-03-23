@@ -5,20 +5,12 @@ use std::path::PathBuf;
 
 use markdown_it::MarkdownIt;
 
-mod intern;
-#[allow(dead_code)]
-mod jotdown_attr;
-
-pub mod attrs;
-pub mod icon;
-pub mod span;
-pub mod sup_sub;
+pub mod rules;
+mod utils;
 
 pub fn add(md: &mut MarkdownIt, icon_dirs: Vec<PathBuf>) {
-    icon::add(md, icon_dirs);
-    span::add(md);
-    sup_sub::add(md);
-    attrs::add(md);
+    rules::inline::add(md, icon_dirs);
+    rules::core::add(md);
 }
 
 thread_local! {

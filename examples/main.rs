@@ -1,6 +1,7 @@
+use std::io::{Read, Write};
+
 use clap::Parser;
 use markdown_it::parser::inline::{Text, TextSpecial};
-use std::io::{Read, Write};
 
 #[derive(Parser)]
 #[command(about = "Renders Markdown to HTML.")]
@@ -45,12 +46,12 @@ fn main() {
     markdown_it::plugins::extra::strikethrough::add(md);
     markdown_it::plugins::extra::tables::add(md);
     markdown_it::plugins::html::add(md);
-    // First: register icon with single colon : marker
+    // Register core rules before core rules
     let icon_dirs: Vec<std::path::PathBuf> = args.icon_dirs.into_iter().map(Into::into).collect();
-    polka::icon::add(md, icon_dirs);
-    // Second: register span with double colon :: marker
-    polka::span::add(md);
-    polka::attrs::add(md);
+    polka::rules::inline::icon::add(md, icon_dirs);
+    polka::rules::inline::span::add(md);
+    // Register core rules after inline/block rules
+    polka::rules::core::attrs::add(md);
 
     let ast = md.parse(&source);
 
