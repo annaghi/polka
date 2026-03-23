@@ -15,8 +15,8 @@ use markdown_it::plugins::cmark::inline::newline::{Hardbreak, Softbreak};
 use markdown_it::plugins::html::html_block::HtmlBlock;
 use markdown_it::{MarkdownIt, Node};
 
-use crate::intern::intern;
-use crate::jotdown_attr::Attributes as JotdownAttrs;
+use crate::utils::intern::intern;
+use crate::utils::jotdown_attr::Attributes as JotdownAttrs;
 
 pub fn add(md: &mut MarkdownIt) {
     md.add_rule::<AttrsRule>().after::<InlineParserRule>();
