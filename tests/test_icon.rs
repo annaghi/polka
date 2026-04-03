@@ -38,7 +38,9 @@ fn render(input: &str) -> String {
 }
 
 fn expected_svg(name: &str) -> String {
-    format!(r#"<svg aria-hidden="true" width="24" height="24" fill="currentColor"><path d="{name}"/></svg>"#)
+    format!(
+        r#"<svg class="icon" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="{name}"/></svg>"#
+    )
 }
 
 fn assert_renders_icon(input: &str, name: &str) {

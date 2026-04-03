@@ -69,21 +69,22 @@ fn inject_inline_attrs(svg: &str, attrs: &[(&str, String)]) -> String {
                 let mut merged: IndexMap<String, String> = IndexMap::new();
 
                 // defaults (lowest priority)
-                merged.insert("aria-hidden".into(), "true".into());
+                merged.insert("class".into(), "icon".into());
                 merged.insert("width".into(), "24".into());
                 merged.insert("height".into(), "24".into());
                 merged.insert("fill".into(), "currentColor".into());
+                merged.insert("aria-hidden".into(), "true".into());
 
-                // existing svg attributes (override defaults)
+                // existing svg attributes (override defaults, merge class)
                 for a in e.attributes().filter_map(Result::ok) {
                     let key = String::from_utf8_lossy(a.key.as_ref()).to_string();
                     let val = String::from_utf8_lossy(&a.value).to_string();
-                    merged.insert(key, val);
+                    merge_insert(&mut merged, key, val);
                 }
 
-                // caller overrides (highest priority)
+                // caller overrides (highest priority, merge class)
                 for (k, v) in attrs {
-                    merged.insert(k.to_string(), v.clone());
+                    merge_insert(&mut merged, k.to_string(), v.clone());
                 }
 
                 let mut elem = BytesStart::new("svg");
@@ -106,6 +107,17 @@ fn inject_inline_attrs(svg: &str, attrs: &[(&str, String)]) -> String {
     }
 
     String::from_utf8(writer.into_inner().into_inner()).unwrap_or_else(|_| svg.to_string())
+}
+
+fn merge_insert(map: &mut IndexMap<String, String>, key: String, val: String) {
+    #[allow(clippy::collapsible_if)]
+    if key == "class" {
+        if let Some(existing) = map.get(&key) {
+            map.insert(key, format!("{existing} {val}"));
+            return;
+        }
+    }
+    map.insert(key, val);
 }
 
 pub struct IconScanner<const MARKER: char>;
@@ -617,9 +629,21 @@ mod tests {
             use super::*;
 
             #[test]
-            fn adds_new_attr() {
-                let result = inject_inline_attrs("<svg><path/></svg>", &[("class", "icon".into())]);
+            fn adds_default_class() {
+                let result = inject_inline_attrs("<svg><path/></svg>", &[]);
                 assert!(result.contains(r#"class="icon""#), "got: {result}");
+            }
+
+            #[test]
+            fn adds_default_class_duplicate() {
+                let result = inject_inline_attrs("<svg><path/></svg>", &[("class", "icon".into())]);
+                assert!(result.contains(r#"class="icon icon""#), "got: {result}");
+            }
+
+            #[test]
+            fn adds_new_attr() {
+                let result = inject_inline_attrs("<svg><path/></svg>", &[("class", "my-icon".into())]);
+                assert!(result.contains(r#"class="icon my-icon""#), "got: {result}");
             }
 
             #[test]
@@ -672,10 +696,10 @@ mod tests {
         fn preserves_existing_xmlns() {
             let result = inject_inline_attrs(
                 r#"<svg xmlns="http://www.w3.org/2000/svg"><path/></svg>"#,
-                &[("class", "icon".into())],
+                &[("class", "my-icon".into())],
             );
             assert!(result.contains("xmlns="), "got: {result}");
-            assert!(result.contains(r#"class="icon""#), "got: {result}");
+            assert!(result.contains(r#"class="icon my-icon""#), "got: {result}");
         }
     }
 }
