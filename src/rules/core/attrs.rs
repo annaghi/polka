@@ -765,6 +765,15 @@ mod tests {
             // doesn't start with '{', so auto-wrapped: "{something {.foo}}"
             let _ = parse_jotdown("something {.foo}");
         }
+
+        // --- Key-value pairs ---
+
+        #[test]
+        fn key_value() {
+            let a = parse_jotdown("{k=v}");
+            let b = parse_jotdown("{k=\"v\"}");
+            assert_eq!(a, b);
+        }
     }
 
     mod scan_leading_attrs {
