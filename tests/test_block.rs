@@ -6,7 +6,18 @@ use markdown_it::plugins::{cmark, extra};
 fn create_test_parser() -> MarkdownIt {
     let mut md = MarkdownIt::new();
     cmark::add(&mut md);
-    extra::add(&mut md);
+    // Markdown Extensions
+    // Don't enable extra::typographer, it replaces ASCII dashes in Text nodes,
+    // breaking CSS identifiers like `.btn--primary`.
+    // extra::typographer::add(&mut md);
+    extra::beautify_links::add(&mut md);
+    // extra::heading_anchors::add(&mut md, slugify);
+    extra::linkify::add(&mut md);
+    // Don't enable extra::smartquotes, it replaces ASCII quotes in Text nodes,
+    // breaking CSS attribute values like `data-attr="value"`.
+    // extra::smartquotes::add(&mut md);
+    extra::strikethrough::add(&mut md);
+    extra::tables::add(&mut md);
     polka::add(&mut md, Vec::new());
     md
 }
