@@ -275,7 +275,7 @@ fn scan_leading_attrs(children: &[Node]) -> Option<(String, usize, bool)> {
     let first = children.first()?;
     let text = first.cast::<Text>()?;
 
-    let content = if text.content.starts_with('<') {
+    let content = if text.content.starts_with(':') {
         is_container_attrs = true;
         &text.content[1..]
     } else {
@@ -890,7 +890,7 @@ mod tests {
         #[test]
         fn container_single_attr() {
             // TA
-            let children = parse_paragraph_children("<{.a}");
+            let children = parse_paragraph_children(":{.a}");
             let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
             assert_eq!(attrs, "{.a}");
             assert_eq!(end_idx, 1);
@@ -900,7 +900,7 @@ mod tests {
         #[test]
         fn container_two_attrs() {
             // TA (SB TA)
-            let children = parse_paragraph_children("<{.a}\n{.b}");
+            let children = parse_paragraph_children(":{.a}\n{.b}");
             let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
             assert_eq!(attrs, "{.a}{.b}");
             assert_eq!(end_idx, 3);
@@ -910,7 +910,7 @@ mod tests {
         #[test]
         fn container_double_attrs() {
             // TA (SB TA)
-            let children = parse_paragraph_children("<{.a}\n<{.b}");
+            let children = parse_paragraph_children(":{.a}\n<{.b}");
             let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
             assert_eq!(attrs, "{.a}");
             assert_eq!(end_idx, 1);
