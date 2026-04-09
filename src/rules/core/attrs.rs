@@ -33,21 +33,21 @@ impl CoreRule for AttrsRule {
             apply_inline_attrs(node);
         });
 
-        crate::debug_write("02-ast-inline_attrs.txt", &format!("{root:#?}"));
+        crate::debug_write("02-ast-attrs-inline.txt", &format!("{root:#?}"));
 
         // Pass 2: Block-level attributes
         root.walk_mut(|node, _| {
             apply_block_attrs(node);
         });
 
-        crate::debug_write("03-ast-block_attrs.txt", &format!("{root:#?}"));
+        crate::debug_write("03-ast-attrs-block.txt", &format!("{root:#?}"));
 
         // Pass 3: Derived attributes
         root.walk_mut(|node, _| {
             apply_derived_attrs(node);
         });
 
-        crate::debug_write("04-ast-_attrs.txt", &format!("{root:#?}"));
+        crate::debug_write("04-ast-attrs-derived.txt", &format!("{root:#?}"));
     }
 }
 
@@ -88,9 +88,8 @@ fn apply_inline_attrs(node: &mut Node) {
         };
 
         let prev_sibling = &mut node.children[i - 1];
-        for (key, value) in attrs {
-            prev_sibling.attrs.push((intern(&key), value));
-        }
+
+        merge_attrs(&mut prev_sibling.attrs, attrs);
 
         if let Some(new_content) = remaining {
             node.children[i]
@@ -114,53 +113,49 @@ fn apply_block_attrs(node: &mut Node) {
         return;
     }
 
-    if node.cast::<Paragraph>().is_none() {
-        apply_non_paragraph_attrs(node);
-    }
+    apply_node_attrs(node);
 
-    apply_paragraph_attrs(node);
+    apply_children_attrs(node);
 }
 
-fn apply_non_paragraph_attrs(node: &mut Node) {
-    let Some((all_attrs_raw, attrs_end_idx, _)) = scan_leading_attrs(&node.children) else {
+fn apply_node_attrs(node: &mut Node) {
+    if node.cast::<Paragraph>().is_some() {
+        return;
+    }
+
+    let Some(leading_attrs) = scan_leading_attrs(&node.children) else {
         return;
     };
 
-    let all_attrs = parse_jotdown(&all_attrs_raw);
+    let all_attrs = parse_jotdown(&leading_attrs.raw);
 
-    if attrs_end_idx == node.children.len() {
+    if leading_attrs.end_idx == node.children.len() {
         // node.children: TA [SB TA]* - only attributes
         if node.cast::<Paragraph>().is_none() && node.cast::<SetextHeader>().is_none() {
-            for (key, value) in all_attrs {
-                node.attrs.push((intern(&key), value));
-            }
-
-            node.children.drain(..attrs_end_idx);
+            merge_attrs(&mut node.attrs, all_attrs);
+            node.children.drain(..leading_attrs.end_idx);
         }
-    } else if attrs_end_idx < node.children.len() {
+    } else if leading_attrs.end_idx < node.children.len() {
         // node.children: TA [SB TA]* SB X Y ... - a prefix of attrs and an SB between content
-        if node.children[attrs_end_idx].cast::<Softbreak>().is_some() {
-            for (key, value) in all_attrs {
-                node.attrs.push((intern(&key), value));
-            }
-
-            node.children.drain(..=attrs_end_idx);
+        if node.children[leading_attrs.end_idx].cast::<Softbreak>().is_some() {
+            merge_attrs(&mut node.attrs, all_attrs);
+            node.children.drain(..=leading_attrs.end_idx);
         } else {
             // Cannot be a structural inline element (not plain text nor whitespace)
-            if node.children[attrs_end_idx].cast::<Text>().is_some()
-                || node.children[attrs_end_idx].cast::<TextSpecial>().is_some()
-                || node.children[attrs_end_idx].cast::<Hardbreak>().is_some()
+            if node.children[leading_attrs.end_idx].cast::<Text>().is_some()
+                || node.children[leading_attrs.end_idx].cast::<TextSpecial>().is_some()
+                || node.children[leading_attrs.end_idx].cast::<Hardbreak>().is_some()
             {
                 return;
             }
 
             // Do not apply attrs to html blocks, use HTML attributes directly
-            if node.children[attrs_end_idx].cast::<HtmlBlock>().is_some() {
+            if node.children[leading_attrs.end_idx].cast::<HtmlBlock>().is_some() {
                 return;
             }
 
             // Next sibling has an attrs-only first child starting a new attrs block: {.widow}
-            let first_is_attr = node.children[attrs_end_idx]
+            let first_is_attr = node.children[leading_attrs.end_idx]
                 .children
                 .first()
                 .is_some_and(|c| is_attr_only_text(c).is_some());
@@ -168,45 +163,38 @@ fn apply_non_paragraph_attrs(node: &mut Node) {
                 return;
             }
 
-            // Apply attrs to next sibling (node.children[attrs_end_idx])
-            for (key, value) in all_attrs {
-                node.children[attrs_end_idx].attrs.push((intern(&key), value));
-            }
-
-            node.children.drain(..attrs_end_idx);
+            // Apply attrs to next sibling (node.children[leading_attrs.end_idx])
+            merge_attrs(&mut node.children[leading_attrs.end_idx].attrs, all_attrs);
+            node.children.drain(..leading_attrs.end_idx);
         }
     }
 }
 
-fn apply_paragraph_attrs(node: &mut Node) {
+fn apply_children_attrs(node: &mut Node) {
     let mut to_remove = Vec::new();
 
     for i in 0..node.children.len() {
         if node.children[i].cast::<Paragraph>().is_some() {
             // P    > TA [SB TA]*
             // P    > TA [SB TA]* SB X Y ...
-            let Some((all_attrs_raw, attrs_end_idx, is_container_attrs)) =
-                scan_leading_attrs(&node.children[i].children)
-            else {
+            let Some(leading_attrs) = scan_leading_attrs(&node.children[i].children) else {
                 continue;
             };
 
             let children_len = node.children[i].children.len();
 
-            let all_attrs = parse_jotdown(&all_attrs_raw);
+            let all_attrs = parse_jotdown(&leading_attrs.raw);
 
-            if attrs_end_idx == children_len {
+            if leading_attrs.end_idx == children_len {
                 // node.children[i].children: TA [SB TA]* - all children are attrs
 
                 // Special case: ListItem is the node, first child Paragraph is all-attrs, and is_container_attrs
                 //    ┌ P > TA [SB TA]*
                 // LI ├ X
                 //    ├ Y
-                if node.cast::<ListItem>().is_some() && is_container_attrs {
+                if node.cast::<ListItem>().is_some() && leading_attrs.is_container {
                     // Apply those attrs to the <li> itself.
-                    for (key, value) in all_attrs {
-                        node.attrs.push((intern(&key), value));
-                    }
+                    merge_attrs(&mut node.attrs, all_attrs);
 
                     // The entire Paragraph was attrs, and so mark it for removal
                     to_remove.push(i);
@@ -235,26 +223,25 @@ fn apply_paragraph_attrs(node: &mut Node) {
                 }
 
                 // Apply attrs to next sibling (node.children[i + 1])
-                for (key, value) in all_attrs {
-                    node.children[i + 1].attrs.push((intern(&key), value));
-                }
+                merge_attrs(&mut node.children[i + 1].attrs, all_attrs);
 
                 // The entire Paragraph was attrs, and so mark it for removal
                 to_remove.push(i);
-            } else if attrs_end_idx < children_len {
+            } else if leading_attrs.end_idx < children_len {
                 // node.children[i].children: TA [SB TA]* SB X Y ... - a prefix of attrs and an SB between content
 
-                if node.children[i].children[attrs_end_idx].cast::<Softbreak>().is_some() {
+                if node.children[i].children[leading_attrs.end_idx]
+                    .cast::<Softbreak>()
+                    .is_some()
+                {
                     // Apply attrs to the current Paragraph (node.children[i])
-                    for (key, value) in all_attrs {
-                        node.children[i].attrs.push((intern(&key), value));
-                    }
+                    merge_attrs(&mut node.children[i].attrs, all_attrs);
 
                     // strip first j+1 children (attrs + trailing softbreak)
                     // The Paragraph's or ListItem's srcmap is deliberately
                     // kept spanning the original range, attrs were part of
                     // this paragraph's source, just extracted as metadata.
-                    node.children[i].children.drain(..=attrs_end_idx);
+                    node.children[i].children.drain(..=leading_attrs.end_idx);
                 }
             }
         }
@@ -263,20 +250,26 @@ fn apply_paragraph_attrs(node: &mut Node) {
     remove_children(node, &to_remove);
 }
 
+struct LeadingAttrs {
+    raw: String,
+    end_idx: usize,
+    is_container: bool,
+}
+
 /// Scans a paragraph's inline children for a leading sequence of attribute-only
 /// Text nodes separated by Softbreaks.
 ///
 /// Returns `(all_attrs, j)` where `j` is the index past the last consumed
 /// attr node, or `None` if the first child isn't a valid attr-only Text.
-fn scan_leading_attrs(children: &[Node]) -> Option<(String, usize, bool)> {
+fn scan_leading_attrs(children: &[Node]) -> Option<LeadingAttrs> {
     let mut all_attrs = String::new();
-    let mut is_container_attrs = false;
+    let mut is_container = false;
 
     let first = children.first()?;
     let text = first.cast::<Text>()?;
 
     let content = if text.content.starts_with(':') {
-        is_container_attrs = true;
+        is_container = true;
         &text.content[1..]
     } else {
         &text.content
@@ -300,7 +293,11 @@ fn scan_leading_attrs(children: &[Node]) -> Option<(String, usize, bool)> {
         j += 2;
     }
 
-    Some((all_attrs, j, is_container_attrs))
+    Some(LeadingAttrs {
+        raw: all_attrs,
+        end_idx: j,
+        is_container,
+    })
 }
 
 fn is_attr_only_text(node: &Node) -> Option<&str> {
@@ -350,6 +347,19 @@ fn find_closing_brace(s: &str) -> Option<usize> {
         }
     }
     None
+}
+
+fn merge_attrs(target: &mut Vec<(&str, String)>, source: Vec<(String, String)>) {
+    #[allow(clippy::collapsible_if)]
+    for (key, val) in source {
+        if key == "class" {
+            if let Some(existing) = target.iter_mut().find(|(k, _)| *k == "class") {
+                existing.1 = format!("{} {val}", existing.1);
+                continue;
+            }
+        }
+        target.push((intern(&key), val));
+    }
 }
 
 /// Parse attributes using Jotdown's parser.
@@ -455,12 +465,12 @@ mod tests {
 
         #[test]
         fn tab_close() {
-            assert_eq!(find_closing_brace(r"\t}"), Some(2));
+            assert_eq!(find_closing_brace("\\t}"), Some(2));
         }
 
         #[test]
         fn newline_close() {
-            assert_eq!(find_closing_brace(r"\n}"), Some(2));
+            assert_eq!(find_closing_brace("\\n}"), Some(2));
         }
 
         #[test]
@@ -470,36 +480,36 @@ mod tests {
 
         #[test]
         fn close_after_quoted_content() {
-            assert_eq!(find_closing_brace(r#"key="val"}"#), Some(9));
+            assert_eq!(find_closing_brace("key=\"val\"}"), Some(9));
         }
 
         #[test]
         fn quoted_brace_ignored() {
             // `"}"` should not match — brace inside quotes
-            assert_eq!(find_closing_brace(r#"key="}"}"#), Some(7));
+            assert_eq!(find_closing_brace("key=\"}\"}"), Some(7));
         }
 
         #[test]
         fn quoted_brace_ignored_multiple() {
             // `"}"` should not match — brace inside quotes
-            assert_eq!(find_closing_brace(r#"key="}" "}"}"#), Some(11));
+            assert_eq!(find_closing_brace("key=\"}\" \"}\"}"), Some(11));
         }
 
         #[test]
         fn escaped_quote_in_quoted_value() {
             // `"val\"}"` — escaped quote keeps us in-quote, real `}` is after close-quote
-            assert_eq!(find_closing_brace(r#"key="v\""}"#), Some(9));
+            assert_eq!(find_closing_brace("key=\"v\\\"\"}"), Some(9));
         }
 
         #[test]
         fn backslash_outside_quote_not_special() {
             // `\` outside quotes is literal, `}` still matches
-            assert_eq!(find_closing_brace(r"\}"), Some(1));
+            assert_eq!(find_closing_brace("\\}"), Some(1));
         }
 
         #[test]
         fn multiple_quoted_segments() {
-            assert_eq!(find_closing_brace(r#"a="x" b="y"}"#), Some(11));
+            assert_eq!(find_closing_brace("a=\"x\" b=\"y\"}"), Some(11));
         }
 
         #[test]
@@ -510,13 +520,13 @@ mod tests {
 
         #[test]
         fn unclosed_quote() {
-            assert_eq!(find_closing_brace(r#""no close"#), None);
+            assert_eq!(find_closing_brace("\"no close"), None);
         }
 
         #[test]
         fn unclosed_quote_with_brace() {
             // brace inside unclosed quote — never leaves quote mode
-            assert_eq!(find_closing_brace(r#""}"#), None);
+            assert_eq!(find_closing_brace("\"}"), None);
         }
 
         #[test]
@@ -527,7 +537,7 @@ mod tests {
         #[test]
         fn quoted_multibyte_brace_ignored() {
             // `}` inside quoted multibyte string — skipped
-            assert_eq!(find_closing_brace(r#"κευ="λ}μ"}"#), Some(14));
+            assert_eq!(find_closing_brace("κευ=\"λ}μ\"}"), Some(14));
         }
     }
 
@@ -586,7 +596,7 @@ mod tests {
 
         #[test]
         fn block_with_quoted_brace() {
-            assert_eq!(split_attrs_remaining(r#"{key="}"} rest"#), (r#"{key="}"}"#, " rest"));
+            assert_eq!(split_attrs_remaining("{key=\"}\"} rest"), ("{key=\"}\"}", " rest"));
         }
 
         #[test]
@@ -601,7 +611,7 @@ mod tests {
 
         #[test]
         fn block_with_quoted_multibyte_value() {
-            assert_eq!(split_attrs_remaining(r#"{k="日本語"}"#), (r#"{k="日本語"}"#, ""));
+            assert_eq!(split_attrs_remaining("{k=\"日本語\"}"), ("{k=\"日本語\"}", ""));
         }
 
         #[test]
@@ -622,8 +632,8 @@ mod tests {
         #[test]
         fn quoted_multibyte_with_escaped_quote() {
             assert_eq!(
-                split_attrs_remaining(r#"{k="café\"bar"}z"#),
-                (r#"{k="café\"bar"}"#, "z")
+                split_attrs_remaining("{k=\"café\\\"bar\"}z"),
+                ("{k=\"café\\\"bar\"}", "z")
             );
         }
     }
@@ -831,90 +841,90 @@ mod tests {
         fn single_attr() {
             // TA
             let children = parse_paragraph_children("{.a}");
-            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
-            assert_eq!(attrs, "{.a}");
+            let LeadingAttrs { raw, end_idx, is_container } = scan_leading_attrs(&children).unwrap();
+            assert_eq!(raw, "{.a}");
             assert_eq!(end_idx, 1);
-            assert!(!is_container_attrs);
+            assert!(!is_container);
         }
 
         #[test]
         fn two_attrs() {
             // TA (SB TA)
             let children = parse_paragraph_children("{.a}\n{.b}");
-            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
-            assert_eq!(attrs, "{.a}{.b}");
+            let LeadingAttrs { raw, end_idx, is_container } = scan_leading_attrs(&children).unwrap();
+            assert_eq!(raw, "{.a}{.b}");
             assert_eq!(end_idx, 3);
-            assert!(!is_container_attrs);
+            assert!(!is_container);
         }
 
         #[test]
         fn three_attrs() {
             // TA (SB TA) (SB TA)
             let children = parse_paragraph_children("{.a}\n{.b}\n{.c}");
-            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
-            assert_eq!(attrs, "{.a}{.b}{.c}");
+            let LeadingAttrs { raw, end_idx, is_container } = scan_leading_attrs(&children).unwrap();
+            assert_eq!(raw, "{.a}{.b}{.c}");
             assert_eq!(end_idx, 5);
-            assert!(!is_container_attrs);
+            assert!(!is_container);
         }
 
         #[test]
         fn single_attr_text() {
             // TA SB T
             let children = parse_paragraph_children("{.a}\ntext");
-            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
-            assert_eq!(attrs, "{.a}");
+            let LeadingAttrs { raw, end_idx, is_container } = scan_leading_attrs(&children).unwrap();
+            assert_eq!(raw, "{.a}");
             assert_eq!(end_idx, 1);
-            assert!(!is_container_attrs);
+            assert!(!is_container);
         }
 
         #[test]
         fn two_attrs_text() {
             // TA (SB TA) SB T
             let children = parse_paragraph_children("{.a}\n{.b}\ntext");
-            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
-            assert_eq!(attrs, "{.a}{.b}");
+            let LeadingAttrs { raw, end_idx, is_container } = scan_leading_attrs(&children).unwrap();
+            assert_eq!(raw, "{.a}{.b}");
             assert_eq!(end_idx, 3);
-            assert!(!is_container_attrs);
+            assert!(!is_container);
         }
 
         #[test]
         fn three_attrs_text() {
             // TA (SB TA) (SB TA) SB T
             let children = parse_paragraph_children("{.a}\n{.b}\n{.c}\ntext");
-            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
-            assert_eq!(attrs, "{.a}{.b}{.c}");
+            let LeadingAttrs { raw, end_idx, is_container } = scan_leading_attrs(&children).unwrap();
+            assert_eq!(raw, "{.a}{.b}{.c}");
             assert_eq!(end_idx, 5);
-            assert!(!is_container_attrs);
+            assert!(!is_container);
         }
 
         #[test]
         fn container_single_attr() {
             // TA
             let children = parse_paragraph_children(":{.a}");
-            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
-            assert_eq!(attrs, "{.a}");
+            let LeadingAttrs { raw, end_idx, is_container } = scan_leading_attrs(&children).unwrap();
+            assert_eq!(raw, "{.a}");
             assert_eq!(end_idx, 1);
-            assert!(is_container_attrs);
+            assert!(is_container);
         }
 
         #[test]
         fn container_two_attrs() {
             // TA (SB TA)
             let children = parse_paragraph_children(":{.a}\n{.b}");
-            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
-            assert_eq!(attrs, "{.a}{.b}");
+            let LeadingAttrs { raw, end_idx, is_container } = scan_leading_attrs(&children).unwrap();
+            assert_eq!(raw, "{.a}{.b}");
             assert_eq!(end_idx, 3);
-            assert!(is_container_attrs);
+            assert!(is_container);
         }
 
         #[test]
         fn container_double_attrs() {
             // TA (SB TA)
             let children = parse_paragraph_children(":{.a}\n<{.b}");
-            let (attrs, end_idx, is_container_attrs) = scan_leading_attrs(&children).unwrap();
-            assert_eq!(attrs, "{.a}");
+            let LeadingAttrs { raw, end_idx, is_container } = scan_leading_attrs(&children).unwrap();
+            assert_eq!(raw, "{.a}");
             assert_eq!(end_idx, 1);
-            assert!(is_container_attrs);
+            assert!(is_container);
         }
     }
 
@@ -999,20 +1009,20 @@ mod tests {
                 #[test]
                 fn hr_stars() {
                     let html = render("{.a}\n***");
-                    assert!(html.contains(r#"<hr class="a">"#), "got: {html}");
+                    assert!(html.contains("<hr class=\"a\">"), "got: {html}");
                 }
 
                 #[test]
                 fn hr_dashes() {
                     let html = render("{.a}\n---");
                     assert!(html.contains("<h2>{.a}</h2>"), "got: {html}");
-                    assert!(!html.contains(r#"class="a"#), "got: {html}");
+                    assert!(!html.contains("class=\"a\""), "got: {html}");
                 }
 
                 #[test]
                 fn hr_underscores() {
                     let html = render("{.a}\n___");
-                    assert!(html.contains(r#"<hr class="a">"#), "got: {html}");
+                    assert!(html.contains("<hr class=\"a\">"), "got: {html}");
                 }
 
                 // ATX headings
@@ -1020,7 +1030,7 @@ mod tests {
                 #[test]
                 fn atx_heading() {
                     let html = render("{.a}\n# foo");
-                    assert!(html.contains(r#"<h1 class="a">foo</h1>"#), "got: {html}");
+                    assert!(html.contains("<h1 class=\"a\">foo</h1>"), "got: {html}");
                 }
 
                 // Setext headings
@@ -1028,13 +1038,13 @@ mod tests {
                 #[test]
                 fn settext_heading_equal_signs() {
                     let html = render("{.a}\nfoo\n===");
-                    assert!(html.contains(r#"<h1 class="a">foo</h1>"#), "got: {html}");
+                    assert!(html.contains("<h1 class=\"a\">foo</h1>"), "got: {html}");
                 }
 
                 #[test]
                 fn settext_heading_dashes() {
                     let html = render("{.a}\nfoo\n---");
-                    assert!(html.contains(r#"<h2 class="a">foo</h2>"#), "got: {html}");
+                    assert!(html.contains("<h2 class=\"a\">foo</h2>"), "got: {html}");
                 }
 
                 // Indented code blocks
@@ -1054,7 +1064,7 @@ mod tests {
                 #[test]
                 fn paragraph() {
                     let html = render("{.a}\ntext");
-                    assert!(html.contains(r#"<p class="a">text</p>"#), "got: {html}");
+                    assert!(html.contains("<p class=\"a\">text</p>"), "got: {html}");
                 }
             }
 
@@ -1066,19 +1076,19 @@ mod tests {
                 #[test]
                 fn hr_stars() {
                     let html = render("{.a}\n\n***");
-                    assert!(html.contains(r#"<hr class="a">"#), "got: {html}");
+                    assert!(html.contains("<hr class=\"a\">"), "got: {html}");
                 }
 
                 #[test]
                 fn hr_dashes() {
                     let html = render("{.a}\n\n---");
-                    assert!(html.contains(r#"<hr class="a">"#), "got: {html}");
+                    assert!(html.contains("<hr class=\"a\">"), "got: {html}");
                 }
 
                 #[test]
                 fn hr_underscores() {
                     let html = render("{.a}\n\n___");
-                    assert!(html.contains(r#"<hr class="a">"#), "got: {html}");
+                    assert!(html.contains("<hr class=\"a\">"), "got: {html}");
                 }
 
                 // ATX headings
@@ -1086,7 +1096,7 @@ mod tests {
                 #[test]
                 fn atx_heading() {
                     let html = render("{.a}\n\n# foo");
-                    assert!(html.contains(r#"<h1 class="a">foo</h1>"#), "got: {html}");
+                    assert!(html.contains("<h1 class=\"a\">foo</h1>"), "got: {html}");
                 }
 
                 // Setext headings
@@ -1094,17 +1104,18 @@ mod tests {
                 #[test]
                 fn settext_heading_equal_signs() {
                     let html = render("{.a}\n\nfoo\n===");
-                    assert!(html.contains(r#"<h1 class="a">foo</h1>"#), "got: {html}");
+                    assert!(html.contains("<h1 class=\"a\">foo</h1>"), "got: {html}");
                 }
 
                 #[test]
                 fn settext_heading_dashes() {
                     let html = render("{.a}\n\nfoo\n---");
-                    assert!(html.contains(r#"<h2 class="a">foo</h2>"#), "got: {html}");
+                    assert!(html.contains("<h2 class=\"a\">foo</h2>"), "got: {html}");
                 }
 
                 // Indented code blocks
                 // Fenced code blocks
+
                 // HTML blocks
 
                 #[test]
@@ -1119,7 +1130,7 @@ mod tests {
                 #[test]
                 fn paragraph() {
                     let html = render("{.a}\n\ntext");
-                    assert!(html.contains(r#"<p class="a">text</p>"#), "got: {html}");
+                    assert!(html.contains("<p class=\"a\">text</p>"), "got: {html}");
                 }
             }
         }
@@ -1133,52 +1144,52 @@ mod tests {
                 #[test]
                 fn blockquote_container() {
                     let html = render("{.a}\n>");
-                    assert!(html.contains(r#"<blockquote class="a">"#), "got: {html}");
+                    assert!(html.contains("<blockquote class=\"a\">"), "got: {html}");
                 }
 
                 #[test]
                 fn blockquote_conatiner_and_inner() {
                     let html = render("{.a}\n>{.b}\n># Title");
-                    assert!(html.contains(r#"<blockquote class="a">"#), "got: {html}");
-                    assert!(html.contains(r#"<h1 class="b">Title</h1>"#), "got: {html}");
+                    assert!(html.contains("<blockquote class=\"a\">"), "got: {html}");
+                    assert!(html.contains("<h1 class=\"b\">Title</h1>"), "got: {html}");
                 }
 
                 #[test]
                 fn blockquote_inner() {
                     let html = render(">{.a}\n># Title");
-                    assert!(html.contains(r#"<h1 class="a">Title</h1>"#), "got: {html}");
+                    assert!(html.contains("<h1 class=\"a\">Title</h1>"), "got: {html}");
                 }
 
                 #[test]
                 fn blockquote_inner_empty() {
                     let html = render(">{.a}\n>\n># Title");
-                    assert!(html.contains(r#"<h1 class="a">Title</h1>"#), "got: {html}");
+                    assert!(html.contains("<h1 class=\"a\">Title</h1>"), "got: {html}");
                 }
 
                 #[test]
                 fn blockquote_inner_many_empty() {
                     let html = render(">{.a}\n>\n>\n># Title");
-                    assert!(html.contains(r#"<h1 class="a">Title</h1>"#), "got: {html}");
+                    assert!(html.contains("<h1 class=\"a\">Title</h1>"), "got: {html}");
                 }
 
                 #[test]
                 fn blockquote_inner_no_lazyness() {
                     let html = render(">{.a}\n# Title");
                     assert!(html.contains("<h1>Title</h1>"), "got: {html}");
-                    assert!(!html.contains(r#"class="a"#), "got: {html}");
+                    assert!(!html.contains("class=\"a\""), "got: {html}");
                 }
 
                 #[test]
                 fn blockquote_container_detached() {
                     let html = render("{.a}\n\n>");
-                    assert!(html.contains(r#"<blockquote class="a">"#), "got: {html}");
+                    assert!(html.contains("<blockquote class=\"a\">"), "got: {html}");
                 }
 
                 #[test]
                 fn blockquote_conatiner_and_inner_detached() {
                     let html = render("{.a}\n\n>{.b}\n># Title");
-                    assert!(html.contains(r#"<blockquote class="a">"#), "got: {html}");
-                    assert!(html.contains(r#"<h1 class="b">Title</h1>"#), "got: {html}");
+                    assert!(html.contains("<blockquote class=\"a\">"), "got: {html}");
+                    assert!(html.contains("<h1 class=\"b\">Title</h1>"), "got: {html}");
                 }
             }
 
@@ -1188,37 +1199,37 @@ mod tests {
                 #[test]
                 fn attr_only() {
                     let html = render("- {.a}");
-                    assert!(html.contains(r#"<li class="a"></li>"#), "got: {html}");
+                    assert!(html.contains("<li class=\"a\"></li>"), "got: {html}");
                 }
 
                 #[test]
                 fn attr_blank_line_only() {
                     let html = render("-\n  {.a}");
-                    assert!(html.contains(r#"<li class="a"></li>"#), "got: {html}");
+                    assert!(html.contains("<li class=\"a\"></li>"), "got: {html}");
                 }
 
                 #[test]
                 fn attr_lazy() {
                     let html = render("- {.a}\nitem");
-                    assert!(html.contains(r#"<li class="a">item</li>"#), "got: {html}");
+                    assert!(html.contains("<li class=\"a\">item</li>"), "got: {html}");
                 }
 
                 #[test]
                 fn attr_indented() {
                     let html = render("- {.a}\n  item");
-                    assert!(html.contains(r#"<li class="a">item</li>"#), "got: {html}");
+                    assert!(html.contains("<li class=\"a\">item</li>"), "got: {html}");
                 }
 
                 #[test]
                 fn attr_blank_line_lazy() {
                     let html = render("-\n  {.a}\nitem");
-                    assert!(html.contains(r#"<li class="a">item</li>"#), "got: {html}");
+                    assert!(html.contains("<li class=\"a\">item</li>"), "got: {html}");
                 }
 
                 #[test]
                 fn attr_blank_line_indented() {
                     let html = render("-\n  {.a}\n  item");
-                    assert!(html.contains(r#"<li class="a">item</li>"#), "got: {html}");
+                    assert!(html.contains("<li class=\"a\">item</li>"), "got: {html}");
                 }
 
                 ////////////////////////////
@@ -1227,7 +1238,7 @@ mod tests {
                 fn attr_lazy_more() {
                     let html = render("- {.a}\nitem\n\n  more");
                     assert!(html.contains("<li>"), "got: {html}");
-                    assert!(html.contains(r#"<p class="a">item</p>"#), "got: {html}");
+                    assert!(html.contains("<p class=\"a\">item</p>"), "got: {html}");
                     assert!(html.contains("<p>more</p>"), "got: {html}");
                 }
 
@@ -1235,7 +1246,7 @@ mod tests {
                 fn attr_indented_more() {
                     let html = render("- {.a}\n  item\n\n  more");
                     assert!(html.contains("<li>"), "got: {html}");
-                    assert!(html.contains(r#"<p class="a">item</p>"#), "got: {html}");
+                    assert!(html.contains("<p class=\"a\">item</p>"), "got: {html}");
                     assert!(html.contains("<p>more</p>"), "got: {html}");
                 }
 
@@ -1243,7 +1254,7 @@ mod tests {
                 fn attr_blank_line_lazy_more() {
                     let html = render("-\n  {.a}\nitem\n\n  more");
                     assert!(html.contains("<li>"), "got: {html}");
-                    assert!(html.contains(r#"<p class="a">item</p>"#), "got: {html}");
+                    assert!(html.contains("<p class=\"a\">item</p>"), "got: {html}");
                     assert!(html.contains("<p>more</p>"), "got: {html}");
                 }
 
@@ -1251,7 +1262,7 @@ mod tests {
                 fn attr_blank_line_indented_more() {
                     let html = render("-\n  {.a}\n  item\n\n  more");
                     assert!(html.contains("<li>"), "got: {html}");
-                    assert!(html.contains(r#"<p class="a">item</p>"#), "got: {html}");
+                    assert!(html.contains("<p class=\"a\">item</p>"), "got: {html}");
                     assert!(html.contains("<p>more</p>"), "got: {html}");
                 }
 
@@ -1261,14 +1272,14 @@ mod tests {
                 fn attr_paragraph() {
                     let html = render("- {.a}\n\n  item");
                     assert!(html.contains("<li>"), "got: {html}");
-                    assert!(html.contains(r#"<p class="a">item</p>"#), "got: {html}");
+                    assert!(html.contains("<p class=\"a\">item</p>"), "got: {html}");
                 }
 
                 #[test]
                 fn attr_blank_line_paragraph() {
                     let html = render("-\n  {.a}\n\n  item");
                     assert!(html.contains("<li>"), "got: {html}");
-                    assert!(html.contains(r#"<p class="a">item</p>"#), "got: {html}");
+                    assert!(html.contains("<p class=\"a\">item</p>"), "got: {html}");
                 }
 
                 #[test]
@@ -1276,7 +1287,7 @@ mod tests {
                     let html = render("- {.a}\n\n  {.b}\n  item");
                     assert!(html.contains("<li>"), "got: {html}");
                     assert!(html.contains("<p>{.a}</p>"), "got: {html}");
-                    assert!(html.contains(r#"<p class="b">item</p>"#), "got: {html}");
+                    assert!(html.contains("<p class=\"b\">item</p>"), "got: {html}");
                 }
 
                 #[test]
@@ -1284,7 +1295,7 @@ mod tests {
                     let html = render("-\n  {.a}\n\n  {.b}\n  item");
                     assert!(html.contains("<li>"), "got: {html}");
                     assert!(html.contains("<p>{.a}</p>"), "got: {html}");
-                    assert!(html.contains(r#"<p class="b">item</p>"#), "got: {html}");
+                    assert!(html.contains("<p class=\"b\">item</p>"), "got: {html}");
                 }
             }
 
@@ -1294,13 +1305,13 @@ mod tests {
                 #[test]
                 fn list_container_attached() {
                     let html = render("{.a}\n- item>");
-                    assert!(html.contains(r#"<ul class="a""#), "got: {html}");
+                    assert!(html.contains("<ul class=\"a\""), "got: {html}");
                 }
 
                 #[test]
                 fn list_container_detached() {
                     let html = render("{.a}\n\n- item>");
-                    assert!(html.contains(r#"<ul class="a""#), "got: {html}");
+                    assert!(html.contains("<ul class=\"a\""), "got: {html}");
                 }
             }
         }
