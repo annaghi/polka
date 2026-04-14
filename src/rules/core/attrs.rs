@@ -26,28 +26,26 @@ pub struct AttrsRule;
 
 impl CoreRule for AttrsRule {
     fn run(root: &mut Node, _md: &MarkdownIt) {
-        crate::debug_write("01-ast.txt", &format!("{root:#?}"));
-
         // Pass 1: Inline attributes
         root.walk_mut(|node, _| {
             apply_inline_attrs(node);
         });
 
-        crate::debug_write("02-ast-attrs-inline.txt", &format!("{root:#?}"));
+        crate::debug_write("11-ast-attrs-inline.txt", &format!("{root:#?}"));
 
         // Pass 2: Block-level attributes
         root.walk_mut(|node, _| {
             apply_block_attrs(node);
         });
 
-        crate::debug_write("03-ast-attrs-block.txt", &format!("{root:#?}"));
+        crate::debug_write("12-ast-attrs-block.txt", &format!("{root:#?}"));
 
         // Pass 3: Derived attributes
         root.walk_mut(|node, _| {
             apply_derived_attrs(node);
         });
 
-        crate::debug_write("04-ast-attrs-derived.txt", &format!("{root:#?}"));
+        crate::debug_write("13-ast-attrs-derived.txt", &format!("{root:#?}"));
     }
 }
 

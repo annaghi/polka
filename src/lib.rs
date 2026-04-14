@@ -9,6 +9,7 @@ pub mod rules;
 mod utils;
 
 pub fn add(md: &mut MarkdownIt, icon_dirs: Vec<PathBuf>) {
+    rules::html::add(md);
     rules::inline::add(md, icon_dirs);
     rules::core::add(md);
 }
