@@ -1,6 +1,0 @@
-{.a}
-# Heading
-
-{.a}
-
-# Heading
