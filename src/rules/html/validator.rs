@@ -87,7 +87,7 @@ fn validate(root: &Node) -> Vec<HtmlError> {
             return;
         };
 
-        let result = scan_node_html(&node_html, node_offset);
+        let result = validate_html_content(&node_html, node_offset);
 
         errors.extend(result.errors);
         warnings.extend(result.warnings);
@@ -126,7 +126,7 @@ fn extract_html_content(node: &Node) -> Option<(String, usize)> {
     None
 }
 
-fn scan_node_html(node_html: &str, node_offset: usize) -> ScanResult {
+fn validate_html_content(node_html: &str, node_offset: usize) -> ScanResult {
     let tokenizer = Tokenizer::new(
         tokensink::HtmlTokenSink::new(node_html, node_offset),
         TokenizerOpts {
