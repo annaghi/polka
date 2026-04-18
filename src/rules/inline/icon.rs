@@ -1,8 +1,8 @@
 //! Inline SVG icon
 //!
-//! looks like `:family-name:`
+//! looks like `:set-name:`
 //!
-//! Parses `:family-name:` shortcodes and resolves them to SVG file content
+//! Parses `:set-name:` shortcodes and resolves them to SVG file content
 //! using the configured icon directories.
 //!
 //! See: markdown-it/src/generics/inline/code_pair.rs
@@ -222,7 +222,7 @@ impl<const MARKER: char> InlineRule for IconScanner<MARKER> {
 ///
 /// - Starts with an ASCII letter or digit (no leading hyphen)
 /// - Contains only ASCII letters, digits, or hyphens
-/// - Contains at least one hyphen (the icon family is the segment before
+/// - Contains at least one hyphen (the icon set is the segment before
 ///   the first hyphen, and maps to a directory on disk)
 /// - Ends with an ASCII letter or digit (no trailing hyphen)
 fn normalize_icon_name(name: &str) -> Option<&str> {
