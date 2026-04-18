@@ -13,7 +13,7 @@ pedantic = { level = "warn", priority = -1 }
 [dependencies]
 html5ever = "0.39.0"
 indexmap = "2.13.0"
-# jotdown = "0.9.1" # Copied (and modified a bit) its state machine instead: src/jotdown_attrs.rs
+# jotdown = "0.9.1" # Adapted state machine: src/core/utils/jotdown_attrs.rs
 markdown-it = "0.6.1"
 quick-xml = "0.39.2"
 
