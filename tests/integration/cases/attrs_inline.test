@@ -1,0 +1,339 @@
+should not support empty attributes alone in a paragraph
+
+```
+{}
+.
+<p>{}</p>
+```
+
+should not support attributes alone in a paragraph (widow)
+
+```
+{.a}
+.
+<p>{.a}</p>
+```
+
+should not support attributes at the start of a paragraph (orphan)
+
+```
+text
+
+{.a}
+.
+<p>text</p>
+<p>{.a}</p>
+```
+
+should support an empty attribute group
+
+```
+*word*{}
+.
+<p><em>word</em></p>
+```
+
+should support multiple empty attribute groups
+
+```
+*word*{}{}
+.
+<p><em>word</em></p>
+```
+
+should support empty groups surrounding a non-empty group
+
+```
+*word*{}{.a}{}
+.
+<p><em class="a">word</em></p>
+```
+
+
+should support inline attributes on emphasis
+
+```
+*word*{.a}
+.
+<p><em class="a">word</em></p>
+```
+
+should support inline attributes on strong
+
+```
+**word**{.a}
+.
+<p><strong class="a">word</strong></p>
+```
+
+should support inline attributes on inline code
+
+```
+`code`{.a}
+.
+<p><code class="a">code</code></p>
+```
+
+should support inline attributes on links
+
+```
+[text](url){.a}
+.
+<p><a class="a" href="url">text</a></p>
+```
+
+should support inline attributes on images
+
+```
+![alt](url){.a}
+.
+<p><img class="a" src="url" alt="alt"></p>
+```
+
+should support empty attributes
+
+```
+*word*{}
+.
+<p><em>word</em></p>
+```
+
+should support whitespace-only attributes
+
+```
+*word*{ 	}
+.
+<p><em>word</em></p>
+```
+
+should support a single class shortcut
+
+```
+*word*{.a}
+.
+<p><em class="a">word</em></p>
+```
+
+should support a single id shortcut
+
+```
+*word*{#a}
+.
+<p><em id="a">word</em></p>
+```
+
+should support a single key-value pair
+
+```
+*word*{k=v}
+.
+<p><em k="v">word</em></p>
+```
+
+should support a quoted value
+
+```
+*word*{k="v w"}
+.
+<p><em k="v w">word</em></p>
+```
+
+should support a single-quoted value
+
+```
+*word*{k='v w'}
+.
+<p><em k="v w">word</em></p>
+```
+
+should support attributes without values
+
+```
+*word*{a b c}
+.
+<p><em a="" b="" c="">word</em></p>
+```
+
+should support multiple classes (space-separated, joined)
+
+```
+*word*{.a .b .c}
+.
+<p><em class="a b c">word</em></p>
+```
+
+should support id overwrite (last wins)
+
+```
+*word*{#a #b}
+.
+<p><em id="b">word</em></p>
+```
+
+should support mixed shortcuts and key-value
+
+```
+*word*{.a #b k=v}
+.
+<p><em class="a" id="b" k="v">word</em></p>
+```
+
+should support two adjacent attribute groups (merged)
+
+```
+*word*{.a}{#b}
+.
+<p><em class="a" id="b">word</em></p>
+```
+
+should support three adjacent attribute groups (merged)
+
+```
+*word*{.a #a #b .c}{ k=v }{ m=n }
+.
+<p><em class="a c" id="b" k="v" m="n">word</em></p>
+```
+
+should merge classes across adjacent groups
+
+```
+*word*{.a}{.b}
+.
+<p><em class="a b">word</em></p>
+```
+
+should overwrite id across adjacent groups (last wins)
+
+```
+*word*{#a}{#b}
+.
+<p><em id="b">word</em></p>
+```
+
+should overwrite key-value across adjacent groups (last wins)
+
+```
+*word*{k=v}{k=w}
+.
+<p><em k="w">word</em></p>
+```
+
+should support full example from spec
+
+```
+here is a *word*{.a #a #b .c}{ k=v } which will be rendered as
+.
+<p>here is a <em class="a c" id="b" k="v">word</em> which will be rendered as</p>
+```
+
+should not support whitespace between attribute groups
+
+```
+*word*{.a} {#b}
+.
+<p><em class="a">word</em> {#b}</p>
+```
+
+should not support a newline between attribute groups
+
+```
+*word*{.a}
+{#b}
+.
+<p><em class="a">word</em>
+{#b}</p>
+```
+
+should not support a newline inside attributes
+
+```
+*word*{.a
+#b}
+.
+<p><em>word</em>{.a
+#b}</p>
+```
+
+should not support whitespace between element and attributes
+
+```
+*word* {.a}
+.
+<p><em>word</em> {.a}</p>
+```
+
+should not apply attributes to plain text (no preceding inline element)
+
+```
+word{.a}
+.
+<p>word{.a}</p>
+```
+
+should not support attributes on an unclosed emphasis
+
+```
+*word{.a}
+.
+<p>*word{.a}</p>
+```
+
+should support an escaped brace to prevent attributes
+
+```
+*word*\{.a}
+.
+<p><em>word</em>{.a}</p>
+```
+
+should not support attributes after a hard line break
+
+```
+*word*\
+{.a}
+.
+<p><em>word</em><br>
+{.a}</p>
+```
+
+should support attributes on nested emphasis (inner)
+
+```
+*a **b**{.x} c*
+.
+<p><em>a <strong class="x">b</strong> c</em></p>
+```
+
+should support attributes on nested emphasis (outer)
+
+```
+*a **b** c*{.x}
+.
+<p><em class="x">a <strong>b</strong> c</em></p>
+```
+
+should support attributes on both inner and outer
+
+```
+*a **b**{.y} c*{.x}
+.
+<p><em class="x">a <strong class="y">b</strong> c</em></p>
+```
+
+should support attributes on consecutive inline elements
+
+```
+*a*{.x} *b*{.y}
+.
+<p><em class="x">a</em> <em class="y">b</em></p>
+```
+
+should not support attributes attaching across a space
+
+```
+*a* *b*{.x}
+.
+<p><em>a</em> <em class="x">b</em></p>
+```
+
+

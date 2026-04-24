@@ -49,6 +49,17 @@ impl CoreRule for AttrsRule {
     }
 }
 
+/// Applies inline attribute groups (e.g. `{.class #id key=val}`) to the preceding sibling.
+///
+/// Attrs attach unless the preceding sibling is `Text`, `TextSpecial`,
+/// `Softbreak`, or `Hardbreak`.
+///
+/// # Caveat
+///
+/// Deny-list approach: any node type not listed silently becomes attrs-attachable.
+/// Risks: (1) new inline node types (e.g. `Hardbreak` was originally missing,
+/// causing `{...}` to be swallowed after `<br>`); (2) plugin-emitted nodes.
+/// An allow-list would fail closed but needs updating per new element.
 fn apply_inline_attrs(node: &mut Node) {
     if node.children.is_empty() {
         return;
@@ -64,6 +75,7 @@ fn apply_inline_attrs(node: &mut Node) {
             if node.children[i - 1].cast::<Text>().is_some()
                 || node.children[i - 1].cast::<TextSpecial>().is_some()
                 || node.children[i - 1].cast::<Softbreak>().is_some()
+                || node.children[i - 1].cast::<Hardbreak>().is_some()
             {
                 continue;
             }
@@ -301,7 +313,7 @@ fn scan_leading_attrs(children: &[Node]) -> Option<LeadingAttrs> {
 fn is_attr_only_text(node: &Node) -> Option<&str> {
     let text = node.cast::<Text>()?;
     let (attrs, remaining) = split_attrs_remaining(&text.content);
-    if attrs.is_empty() || !remaining.is_empty() {
+    if attrs.is_empty() || !remaining.trim().is_empty() {
         return None;
     }
     Some(attrs)
@@ -833,6 +845,15 @@ mod tests {
         fn attr_with_remaining_text_whitespace() {
             let children = parse_paragraph_children("{.a} remaining\n");
             assert!(scan_leading_attrs(&children).is_none());
+        }
+
+        #[test]
+        fn attr_with_trailing_whitespace_only() {
+            let children = parse_paragraph_children("{.a}   \n");
+            let LeadingAttrs { raw, end_idx, is_container } = scan_leading_attrs(&children).unwrap();
+            assert_eq!(raw, "{.a}");
+            assert_eq!(end_idx, 1);
+            assert!(!is_container);
         }
 
         #[test]
