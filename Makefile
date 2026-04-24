@@ -1,21 +1,19 @@
-.PHONY: example tree
-.PHONY: fix
-.PHONY: update
+.DEFAULT_GOAL := help
+.PHONY: help test test-integration fix update
 
-example:
-	cargo run --example main -- examples/block_attrs/atx_heading.md --output tmp/output.html --icon-dir assets/.icons
+help:  ## Show this help
+	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\nTargets:\n"} \
+	     /^[a-zA-Z_-]+:.*##/ {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' \
+	     $(MAKEFILE_LIST)
 
-tree:
-	cargo run --example main -- --tree examples/block_attrs/atx_heading.md
+test:  ## Run all polka tests
+	cargo test -p polka
 
-fix:
-	@echo "Running pre-commit with auto-fix..."
+test-integration:  ## Run integration tests only
+	cargo test -p polka --test integration
+
+fix:  ## Run pre-commit with auto-fix
 	prek run --all-files
 
-update:
-	@echo "Updating pre-commit hooks..."
+update:  ## Update pre-commit hooks
 	prek auto-update
-
-test:
-	cargo test --lib
-	cargo test --test main
