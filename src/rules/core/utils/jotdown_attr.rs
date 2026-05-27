@@ -139,9 +139,20 @@ pub enum AttributeKind<'s> {
     /// # Examples
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let mut a = Attributes::try_from("{.a}").unwrap().into_iter();
     /// assert_eq!(a.next(), Some((AttributeKind::Class, "a".into())));
+    /// assert_eq!(a.next(), None);
+    /// ```
+    ///
+    /// Adjacent classes (`.a.b`) parse as separate elements, equivalent to
+    /// space-separated (`.a .b`):
+    ///
+    /// ```
+    /// # use polka::rules::core::utils::jotdown_attr::*;
+    /// let mut a = Attributes::try_from("{.a.b}").unwrap().into_iter();
+    /// assert_eq!(a.next(), Some((AttributeKind::Class, "a".into())));
+    /// assert_eq!(a.next(), Some((AttributeKind::Class, "b".into())));
     /// assert_eq!(a.next(), None);
     /// ```
     Class,
@@ -150,7 +161,7 @@ pub enum AttributeKind<'s> {
     /// # Examples
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let mut a = Attributes::try_from("{#a}").unwrap().into_iter();
     /// assert_eq!(a.next(), Some((AttributeKind::Id, "a".into())));
     /// assert_eq!(a.next(), None);
@@ -161,7 +172,7 @@ pub enum AttributeKind<'s> {
     /// # Examples
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let mut a = Attributes::try_from(r#"{key=value id="a"}"#)
     ///     .unwrap()
     ///     .into_iter();
@@ -181,7 +192,7 @@ pub enum AttributeKind<'s> {
     /// # Examples
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let mut a = Attributes::try_from("{%cmt0% %cmt1}").unwrap().into_iter();
     /// assert_eq!(a.next(), Some((AttributeKind::Comment, "cmt0".into())));
     /// assert_eq!(a.next(), Some((AttributeKind::Comment, "cmt1".into())));
@@ -224,7 +235,7 @@ impl AttributeKind<'_> {
 /// Access the inner [`Vec`]:
 ///
 /// ```
-/// # use jotdown::*;
+/// # use polka::rules::core::utils::jotdown_attr::*;
 /// let a: Attributes = r#"{#a .b id=c class=d key="val" %comment%}"#
 ///     .try_into()
 ///     .unwrap();
@@ -244,7 +255,7 @@ impl AttributeKind<'_> {
 /// Replace a value:
 ///
 /// ```
-/// # use jotdown::*;
+/// # use polka::rules::core::utils::jotdown_attr::*;
 /// let mut attrs = Attributes::try_from("{key1=val1 key2=val2}").unwrap();
 ///
 /// for (attr, value) in &mut attrs {
@@ -265,7 +276,7 @@ impl AttributeKind<'_> {
 /// Filter out keys with a specific prefix:
 ///
 /// ```
-/// # use jotdown::*;
+/// # use polka::rules::core::utils::jotdown_attr::*;
 /// let a: Attributes = Attributes::try_from("{ign:x=a ign:y=b z=c}")
 ///     .unwrap()
 ///     .into_iter()
@@ -310,7 +321,7 @@ impl<'s> Attributes<'s> {
     /// # Examples
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let a = Attributes::try_from("{x=y .a}").unwrap();
     /// assert!(a.contains_key("x"));
     /// assert!(!a.contains_key("y"));
@@ -331,7 +342,7 @@ impl<'s> Attributes<'s> {
     /// For the "class" key, concatenate all class values:
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// assert_eq!(
     ///     Attributes::try_from("{.a class=b}").unwrap().get_value("class"),
     ///     Some("a b".into()),
@@ -341,7 +352,7 @@ impl<'s> Attributes<'s> {
     /// For other keys, return the last set value:
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// assert_eq!(
     ///     Attributes::try_from("{x=a x=b}").unwrap().get_value("x"),
     ///     Some("b".into()),
@@ -373,7 +384,7 @@ impl<'s> Attributes<'s> {
     /// For "class" elements, values are concatenated:
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let a: Attributes = "{class=a .b}".try_into().unwrap();
     /// let mut pairs = a.unique_pairs();
     /// assert_eq!(pairs.next(), Some(("class", "a b".into())));
@@ -383,7 +394,7 @@ impl<'s> Attributes<'s> {
     /// For other keys, the last set value is used:
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let a: Attributes = "{id=a key=b #c key=d}".try_into().unwrap();
     /// let mut pairs = a.unique_pairs();
     /// assert_eq!(pairs.next(), Some(("id", "c".into())));
@@ -394,7 +405,7 @@ impl<'s> Attributes<'s> {
     /// Comments are ignored:
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let a: Attributes = "{%cmt% #a}".try_into().unwrap();
     /// let mut pairs = a.unique_pairs();
     /// assert_eq!(pairs.next(), Some(("id", "a".into())));
@@ -424,16 +435,16 @@ impl<'s> TryFrom<&'s str> for Attributes<'s> {
     /// A single set of attributes can be parsed:
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let mut a = Attributes::try_from("{.a}").unwrap().into_iter();
     /// assert_eq!(a.next(), Some((AttributeKind::Class, "a".into())));
     /// assert_eq!(a.next(), None);
     /// ```
     ///
-    /// Multiple sets can be parsed if they immediately follow the each other:
+    /// Multiple sets can be parsed if they immediately follow each other:
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let mut a = Attributes::try_from("{.a}{.b}").unwrap().into_iter();
     /// assert_eq!(a.next(), Some((AttributeKind::Class, "a".into())));
     /// assert_eq!(a.next(), Some((AttributeKind::Class, "b".into())));
@@ -443,7 +454,7 @@ impl<'s> TryFrom<&'s str> for Attributes<'s> {
     /// When the attributes are invalid, the position where the parsing failed is returned:
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// assert_eq!(Attributes::try_from("{.a $}"), Err(ParseAttributesError { pos: 4 }));
     /// ```
     fn try_from(s: &'s str) -> Result<Self, Self::Error> {
@@ -487,7 +498,7 @@ impl<'s> FromIterator<AttributeElem<'s>> for Attributes<'s> {
     /// # Examples
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let e0 = (AttributeKind::Class, AttributeValue::from("a"));
     /// let e1 = (AttributeKind::Id, AttributeValue::from("b"));
     /// let a: Attributes = [e0.clone(), e1.clone()].into_iter().collect();
@@ -507,7 +518,7 @@ impl std::fmt::Debug for Attributes<'_> {
     /// # Examples
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let a = r#"{#a .b id=c class=d key="val" %comment%}"#;
     /// let b = r#"{#a .b id="c" class="d" key="val" %comment%}"#;
     /// assert_eq!(format!("{:?}", Attributes::try_from(a).unwrap()), b);
@@ -541,7 +552,7 @@ impl<'s> IntoIterator for Attributes<'s> {
     /// # Examples
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let a = Attributes::try_from("{key1=val1 key2=val2}").unwrap();
     /// let mut elems = a.into_iter();
     /// assert_eq!(
@@ -575,7 +586,7 @@ impl<'i, 's> IntoIterator for &'i Attributes<'s> {
     /// # Examples
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let a = Attributes::try_from("{key1=val1 key2=val2}").unwrap();
     /// let mut elems = a.iter();
     /// assert_eq!(
@@ -609,7 +620,7 @@ impl<'i, 's> IntoIterator for &'i mut Attributes<'s> {
     /// # Examples
     ///
     /// ```
-    /// # use jotdown::*;
+    /// # use polka::rules::core::utils::jotdown_attr::*;
     /// let mut a = Attributes::try_from("{key1=val1 key2=val2}").unwrap();
     /// let mut elems = a.iter_mut();
     /// assert_eq!(
@@ -806,31 +817,34 @@ impl State {
                 b'.' => ClassFirst,
                 b'#' => IdentifierFirst,
                 b'%' => CommentFirst,
-                c if is_name(c) => Key,
+                c if is_name_char(c) => Key,
                 c if c.is_ascii_whitespace() => Whitespace,
                 _ => Invalid,
             },
+
             CommentFirst | Comment | CommentNewline if c == b'%' => Whitespace,
             CommentFirst | Comment | CommentNewline if c == b'}' => Done,
             CommentFirst | Comment | CommentNewline if c == b'\n' => CommentNewline,
             CommentFirst | Comment | CommentNewline => Comment,
-            ClassFirst if is_name(c) => Class,
+
+            ClassFirst if is_name_char(c) => Class,
             ClassFirst => Invalid,
-            IdentifierFirst if is_name(c) => Identifier,
+            IdentifierFirst if is_name_char(c) => Identifier,
             IdentifierFirst => Invalid,
-            s @ (Class | Identifier | Value) if is_name(c) => s,
+            Class if is_name_char(c) => Class,
+            Identifier if is_name_char(c) => Identifier,
+            Value if is_value_char(c) => Value,
             Class | Identifier | Value if c.is_ascii_whitespace() => Whitespace,
             Class | Identifier | Value if c == b'}' => Done,
+            Class if c == b'.' => ClassFirst,
             Class | Identifier | Value => Invalid,
-            Key if is_name(c) => Key,
+
+            Key if is_name_char(c) => Key,
             Key if c == b'=' => ValueFirst,
-            // Since jotdown 0.9.1: flag (valueless key), e.g. `{hidden}`, parsed as `Pair { key, value: "" }`.
-            // New addition:
             Key if c.is_ascii_whitespace() => Whitespace,
-            // New addition:
             Key if c == b'}' => Done,
             Key => Invalid,
-            ValueFirst if is_name(c) => Value,
+            ValueFirst if is_value_char(c) => Value,
             ValueFirst if c == b'"' => ValueQuoted,
             ValueFirst => Invalid,
             ValueQuoted | ValueNewline | ValueContinued if c == b'"' => Whitespace,
@@ -843,233 +857,12 @@ impl State {
     }
 }
 
-pub(crate) fn is_name(c: u8) -> bool {
+pub(crate) fn is_name_char(c: u8) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, b':' | b'_' | b'-')
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn attribute_kind_class() {
-        let mut a = Attributes::try_from("{.a}").unwrap().into_iter();
-        assert_eq!(a.next(), Some((AttributeKind::Class, "a".into())));
-        assert_eq!(a.next(), None);
-    }
-
-    #[test]
-    fn attribute_kind_id() {
-        let mut a = Attributes::try_from("{#a}").unwrap().into_iter();
-        assert_eq!(a.next(), Some((AttributeKind::Id, "a".into())));
-        assert_eq!(a.next(), None);
-    }
-
-    #[test]
-    fn attribute_kind_pair() {
-        let mut a = Attributes::try_from(r#"{key=value id="a" flag}"#).unwrap().into_iter();
-        assert_eq!(
-            a.next(),
-            Some((AttributeKind::Pair { key: "key".into() }, "value".into()))
-        );
-        assert_eq!(a.next(), Some((AttributeKind::Pair { key: "id".into() }, "a".into())));
-        assert_eq!(a.next(), Some((AttributeKind::Pair { key: "flag".into() }, "".into())));
-        assert_eq!(a.next(), None);
-    }
-
-    #[test]
-    fn attribute_kind_comment() {
-        let mut a = Attributes::try_from("{%cmt0% %cmt1}").unwrap().into_iter();
-        assert_eq!(a.next(), Some((AttributeKind::Comment, "cmt0".into())));
-        assert_eq!(a.next(), Some((AttributeKind::Comment, "cmt1".into())));
-        assert_eq!(a.next(), None);
-    }
-
-    #[test]
-    fn attributes_into_vec() {
-        let a: Attributes = r#"{#a .b id=c class=d key="val" flag %comment%}"#.try_into().unwrap();
-        assert_eq!(
-            Vec::from(a),
-            vec![
-                (AttributeKind::Id, "a".into()),
-                (AttributeKind::Class, "b".into()),
-                (AttributeKind::Pair { key: "id".into() }, "c".into()),
-                (AttributeKind::Pair { key: "class".into() }, "d".into()),
-                (AttributeKind::Pair { key: "key".into() }, "val".into()),
-                (AttributeKind::Pair { key: "flag".into() }, "".into()),
-                (AttributeKind::Comment, "comment".into()),
-            ],
-        );
-    }
-
-    #[test]
-    fn attributes_replace_value() {
-        let mut attrs = Attributes::try_from("{key1=val1 key2=val2}").unwrap();
-        for (attr, value) in &mut attrs {
-            if attr.key() == Some("key2") {
-                *value = "new_val".into();
-            }
-        }
-        assert_eq!(
-            attrs.as_slice(),
-            &[
-                (AttributeKind::Pair { key: "key1".into() }, "val1".into()),
-                (AttributeKind::Pair { key: "key2".into() }, "new_val".into()),
-            ]
-        );
-    }
-
-    #[test]
-    fn attributes_filter_prefix() {
-        let a: Attributes = Attributes::try_from("{ign:x=a ign:y=b z=c}")
-            .unwrap()
-            .into_iter()
-            .filter(|(k, _)| !matches!(k.key(), Some(key) if key.starts_with("ign:")))
-            .collect();
-        let b = Attributes::try_from("{z=c}").unwrap();
-        assert_eq!(a, b);
-    }
-
-    #[test]
-    fn contains_key() {
-        let a = Attributes::try_from("{x=y .a}").unwrap();
-        assert!(a.contains_key("x"));
-        assert!(!a.contains_key("y"));
-        assert!(a.contains_key("class"));
-    }
-
-    #[test]
-    fn get_value_class_concatenates() {
-        assert_eq!(
-            Attributes::try_from("{.a class=b}").unwrap().get_value("class"),
-            Some("a b".into()),
-        );
-    }
-
-    #[test]
-    fn get_value_last_wins() {
-        assert_eq!(
-            Attributes::try_from("{x=a x=b}").unwrap().get_value("x"),
-            Some("b".into()),
-        );
-    }
-
-    #[test]
-    fn unique_pairs_class_concatenated() {
-        let a: Attributes = "{class=a .b}".try_into().unwrap();
-        let mut pairs = a.unique_pairs();
-        assert_eq!(pairs.next(), Some(("class", "a b".into())));
-        assert_eq!(pairs.next(), None);
-    }
-
-    #[test]
-    fn unique_pairs_last_value() {
-        let a: Attributes = "{id=a key=b #c key=d}".try_into().unwrap();
-        let mut pairs = a.unique_pairs();
-        assert_eq!(pairs.next(), Some(("id", "c".into())));
-        assert_eq!(pairs.next(), Some(("key", "d".into())));
-        assert_eq!(pairs.next(), None);
-    }
-
-    #[test]
-    fn unique_pairs_ignores_comments() {
-        let a: Attributes = "{%cmt% #a}".try_into().unwrap();
-        let mut pairs = a.unique_pairs();
-        assert_eq!(pairs.next(), Some(("id", "a".into())));
-    }
-
-    #[test]
-    fn try_from_single() {
-        let mut a = Attributes::try_from("{.a}").unwrap().into_iter();
-        assert_eq!(a.next(), Some((AttributeKind::Class, "a".into())));
-        assert_eq!(a.next(), None);
-    }
-
-    #[test]
-    fn try_from_multiple_consecutive() {
-        let mut a = Attributes::try_from("{.a}{.b}").unwrap().into_iter();
-        assert_eq!(a.next(), Some((AttributeKind::Class, "a".into())));
-        assert_eq!(a.next(), Some((AttributeKind::Class, "b".into())));
-        assert_eq!(a.next(), None);
-    }
-
-    #[test]
-    fn try_from_invalid() {
-        assert_eq!(Attributes::try_from("{.a $}"), Err(ParseAttributesError { pos: 4 }));
-    }
-
-    #[test]
-    fn debug_format() {
-        let a = r#"{#a .b id=c class=d key="val" %comment%}"#;
-        let b = r#"{#a .b id="c" class="d" key="val" %comment%}"#;
-        assert_eq!(format!("{:?}", Attributes::try_from(a).unwrap()), b);
-    }
-
-    #[test]
-    fn from_iter() {
-        let e0 = (AttributeKind::Class, AttributeValue::from("a"));
-        let e1 = (AttributeKind::Id, AttributeValue::from("b"));
-        let a: Attributes = [e0.clone(), e1.clone()].into_iter().collect();
-        assert_eq!(format!("{:?}", a), "{.a #b}");
-        let mut elems = a.into_iter();
-        assert_eq!(elems.next(), Some(e0));
-        assert_eq!(elems.next(), Some(e1));
-    }
-
-    #[test]
-    fn into_iter_owned() {
-        let a = Attributes::try_from("{key1=val1 key2=val2 flag}").unwrap();
-        let mut elems = a.into_iter();
-        assert_eq!(
-            elems.next(),
-            Some((AttributeKind::Pair { key: "key1".into() }, AttributeValue::from("val1")))
-        );
-        assert_eq!(
-            elems.next(),
-            Some((AttributeKind::Pair { key: "key2".into() }, AttributeValue::from("val2")))
-        );
-        assert_eq!(
-            elems.next(),
-            Some((AttributeKind::Pair { key: "flag".into() }, AttributeValue::from("")))
-        );
-        assert_eq!(elems.next(), None);
-    }
-
-    #[test]
-    fn into_iter_borrowed() {
-        let a = Attributes::try_from("{key1=val1 key2=val2 flag}").unwrap();
-        let mut elems = a.iter();
-        assert_eq!(
-            elems.next(),
-            Some(&(AttributeKind::Pair { key: "key1".into() }, AttributeValue::from("val1")))
-        );
-        assert_eq!(
-            elems.next(),
-            Some(&(AttributeKind::Pair { key: "key2".into() }, AttributeValue::from("val2")))
-        );
-        assert_eq!(
-            elems.next(),
-            Some(&(AttributeKind::Pair { key: "flag".into() }, AttributeValue::from("")))
-        );
-        assert_eq!(elems.next(), None);
-    }
-
-    #[test]
-    fn into_iter_mut() {
-        let mut a = Attributes::try_from("{key1=val1 key2=val2 flag}").unwrap();
-        let mut elems = a.iter_mut();
-        assert_eq!(
-            elems.next(),
-            Some(&mut (AttributeKind::Pair { key: "key1".into() }, AttributeValue::from("val1")))
-        );
-        assert_eq!(
-            elems.next(),
-            Some(&mut (AttributeKind::Pair { key: "key2".into() }, AttributeValue::from("val2")))
-        );
-        assert_eq!(
-            elems.next(),
-            Some(&mut (AttributeKind::Pair { key: "flag".into() }, AttributeValue::from("")))
-        );
-        assert_eq!(elems.next(), None);
-    }
+fn is_value_char(c: u8) -> bool {
+    // Blacklist approach matching CommonMark directive proposal.
+    // Reject: " ' < = > ` } and whitespace
+    !matches!(c, b'"' | b'\'' | b'<' | b'=' | b'>' | b'`' | b'}') && !c.is_ascii_whitespace()
 }

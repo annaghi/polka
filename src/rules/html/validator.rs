@@ -181,36 +181,36 @@ fn validate_html_content(node_html: &str, node_offset: usize) -> ScanResult {
 /// rules (e.g. `<p>` closing a previous `<p>`) are not implemented.
 /// This is intentional: markdown-embedded HTML should use explicit
 /// closing tags for clarity.
-///
-///
-/// events : <tag, kind, offset>[]
-/// errors = []
-/// stack = []
-/// evicted : multiset = {}
-///
-/// for event in events:
-///     if event.kind == open:                                // opening event.tag
-///         stack.push(event)
-///
-///     else:                                                 // closing event.tag
-///         match = stack.find_last(e => e.tag == event.tag)  // search for matching opening from the top of the stack
-///
-///         if !match:                                        // current closing has no matching opening
-///             if evicted.count(event.tag) > 0:
-///                 evicted.remove_one(event.tag)
-///             else:
-///                 errors.append("closing </{event.tag}> at {event.offset} has no opener")
-///
-///         else:                                             // current closing has a matching opening
-///             while stack.top != match:
-///                 evicted.add(stack.top.tag)
-///                 errors.append("misnested <{stack.top.tag}> at {stack.top.offset}, forced by </{event.tag}> at {event.offset}")
-///                 stack.pop
-///             stack.pop                                     // consume match
-///
-/// for event in stack:
-///     errors.append("unclosed <{event.tag}> at {event.offset}")
-///
+//
+//
+// events : <tag, kind, offset>[]
+// errors = []
+// stack = []
+// evicted : multiset = {}
+//
+// for event in events:
+//     if event.kind == open:                                // opening event.tag
+//         stack.push(event)
+//
+//     else:                                                 // closing event.tag
+//         match = stack.find_last(e => e.tag == event.tag)  // search for matching opening from the top of the stack
+//
+//         if !match:                                        // current closing has no matching opening
+//             if evicted.count(event.tag) > 0:
+//                 evicted.remove_one(event.tag)
+//             else:
+//                 errors.append("closing </{event.tag}> at {event.offset} has no opener")
+//
+//         else:                                             // current closing has a matching opening
+//             while stack.top != match:
+//                 evicted.add(stack.top.tag)
+//                 errors.append("misnested <{stack.top.tag}> at {stack.top.offset}, forced by </{event.tag}> at {event.offset}")
+//                 stack.pop
+//             stack.pop                                     // consume match
+//
+// for event in stack:
+//     errors.append("unclosed <{event.tag}> at {event.offset}")
+//
 fn validate_tag_nesting(tag_events: &[tokensink::TagEvent], errors: &mut Vec<HtmlError>) {
     debug_assert!(
         tag_events.iter().all(|e| !tokensink::is_void(&e.tag)),

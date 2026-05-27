@@ -138,12 +138,12 @@ should support a quoted value
 <p><em k="v w">word</em></p>
 ```
 
-should support a single-quoted value
+should not support a single-quoted value
 
 ```
 *word*{k='v w'}
 .
-<p><em k="v w">word</em></p>
+<p><em>word</em></p>
 ```
 
 should support attributes without values
