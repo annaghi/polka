@@ -1,2 +1,2 @@
 #[allow(dead_code)]
-pub(super) mod jotdown_attr;
+pub mod jotdown_attr;

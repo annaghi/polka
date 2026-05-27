@@ -5,9 +5,6 @@ edition = "2024"
 rust-version = "1.90"
 publish = false
 
-[lib]
-doctest = false  # markdown-it setup too heavy for doctests
-
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
